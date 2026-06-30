@@ -25,7 +25,23 @@ function detectYear(p){
 function imgUrl(q,w,h){return "https://source.unsplash.com/"+(w||700)+"x"+(h||260)+"/?"+encodeURIComponent(q)+"&sig="+Math.random().toString(36).slice(2,6)}
 function starsStr(n){let s="";for(let i=0;i<Math.min(n||3,5);i++)s+="★";return s}
 
+function parseDurationToNights(d){
+  if(!d)return null
+  const exact=d.match(/\((\d+)\s*giorni esatti\)/)
+  if(exact)return parseInt(exact[1])
+  const s=d.toLowerCase()
+  if(s.indexOf("3-4")>=0)return 4
+  if(s.indexOf("2 settimane")>=0)return 14
+  if(s.indexOf("settimana")>=0)return 7
+  if(s.indexOf("10")>=0)return 10
+  if(s.indexOf("3+")>=0)return 21
+  const num=s.match(/(\d+)/)
+  return num?parseInt(num[1]):null
+}
+
 function mdHtml(t){
+  t=t.replace(/([^\n])(MATTINA|POMERIGGIO|SERA)\b/g,"$1\n\n$2")
+  t=t.replace(/^(MATTINA|POMERIGGIO|SERA)\s+(?!$)/gm,"$1\n")
   return t
     .replace(/\*\*(.*?)\*\*/g,`<strong style='color:${GL};font-weight:500'>$1</strong>`)
     .replace(/^### (.+)$/gm,`<div style='display:flex;align-items:center;gap:10px;margin:1.6rem 0 0.8rem;padding:10px 14px;background:linear-gradient(90deg,#1a1400,transparent);border-left:3px solid ${G};border-radius:0 8px 8px 0'><span style='font-family:Cormorant Garamond,serif;font-size:16px;font-weight:600;color:${GL}'>$1</span></div>`)
@@ -93,6 +109,8 @@ const CSS=`
 .lt span{color:#C9A84C}
 .sub{font-size:11px;letter-spacing:3px;color:#888;margin-bottom:1.5rem;text-align:center}
 .dl{width:100%;max-width:800px;height:.5px;background:#2a2a2a;margin-bottom:1.5rem}
+.back{display:flex;align-items:center;gap:6px;background:transparent;border:none;color:#777;font-size:12px;cursor:pointer;margin-bottom:.8rem;padding:4px 0;font-family:'Inter',sans-serif;transition:color .2s;width:100%;max-width:720px;text-align:left}
+.back:hover{color:#C9A84C}
 .prog{display:flex;align-items:center;justify-content:center;margin-bottom:2rem;width:100%;max-width:920px;overflow-x:auto;padding:.5rem 0 .8rem;scrollbar-width:none}
 .prog::-webkit-scrollbar{display:none}
 .sn{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
@@ -168,6 +186,7 @@ const CSS=`
 .yn{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:.5rem}
 .ync{background:#111;border:.5px solid #333;border-radius:12px;padding:1.4rem 1rem;cursor:pointer;transition:all .2s;text-align:center}
 .ync:hover{border-color:#C9A84C;background:#1a1400}
+.dpick{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
 /* TOAST SALVATAGGIO */
 .toast{position:fixed;bottom:2rem;right:2rem;background:#1a1400;border:.5px solid #C9A84C;border-radius:12px;padding:12px 20px;font-size:13px;color:#e8c97a;z-index:9999;animation:fadeIn .3s ease}
@@ -182,6 +201,8 @@ export default function PlannerPage() {
   const [step,setStep]=useState(1)
   const [dest,setDest]=useState("")
   const [period,setPeriod]=useState("")
+  const [startDate,setStartDate]=useState("")
+  const [endDate,setEndDate]=useState("")
   const [tripYear,setTripYear]=useState(CY)
   const [travType,setTravType]=useState("")
   const [adults,setAdults]=useState(2)
@@ -238,6 +259,31 @@ export default function PlannerPage() {
     return b+k+" - "+travType
   }
 
+  function goBack(){
+    if(step<=1)return
+    if(step===5 && startDate && endDate && duration && duration.indexOf("giorni esatti")>=0){
+      setStep(2)
+      return
+    }
+    setStep(step-1)
+  }
+
+  function confirmDates(){
+    if(!startDate||!endDate)return
+    const d1=new Date(startDate), d2=new Date(endDate)
+    const diffDays=Math.round((d2-d1)/86400000)
+    const monthName=MONTHS[d1.getMonth()]
+    setPeriod(monthName)
+    setTripYear(d1.getFullYear())
+    let durLabel="3+ settimane"
+    if(diffDays<=4)durLabel="3-4 giorni"
+    else if(diffDays<=8)durLabel="1 settimana"
+    else if(diffDays<=11)durLabel="10 giorni"
+    else if(diffDays<=15)durLabel="2 settimane"
+    setDuration(durLabel+" ("+diffDays+" giorni esatti)")
+    setStep(5)
+  }
+
   // ── SALVA SU SUPABASE ─────────────────────────────────
   async function saveItinerary(){
     if(!user||saved)return
@@ -276,11 +322,25 @@ export default function PlannerPage() {
   async function genPlan(dep){
     setStep(8); setPlanLoad(true); setPlanText("")
     const y=detectYear(period); setTripYear(y)
-    const msg="Crea un piano visivo dell'itinerario per: "+dest+", "+period+" "+y+", "+duration+", "+style+", "+trav()+", budget "+budget+".\n"+
-      "FORMATO OBBLIGATORIO: per ogni citta o area geografica usa esattamente:\n"+
-      "### NOME CITTA (N giorni)\n- **Cosa vedere**: luogo - perche\n- **Cosa fare**: attivita - descrizione\n- **Da non perdere**: esperienza - perche\n\n"+
-      "REGOLE: solo ###, niente tabelle, inizia subito con il primo ###. Scrivi in italiano."
-    await callAI(msg,1500,t=>setPlanText(t))
+    const msg="Crea un piano visivo dell'itinerario per: "+dest+", "+period+" "+y+", "+duration+", "+style+", "+trav()+", budget "+budget+".\n\n"+
+      "STEP PRELIMINARE: stabilisci se "+dest+" e (A) una SINGOLA CITTA o (B) una REGIONE/PAESE vasto.\n"+
+      "Se (A): dividi per QUARTIERI della stessa citta.\n"+
+      "Se (B): dividi per CITTA DIVERSE.\n\n"+
+      "FORMATO OBBLIGATORIO per ogni blocco:\n"+
+      "### NOME (N giorni) [TIPO]\n"+
+      "- **Cosa vedere**: luogo - perche\n"+
+      "- **Cosa fare**: attivita - descrizione\n"+
+      "- **Da non perdere**: esperienza - perche\n\n"+
+      "[TIPO] e SEMPRE [QUARTIERE] o [CITTA].\n\n"+
+      "REGOLE:\n"+
+      "1. Solo ### per i titoli\n"+
+      "2. Niente tabelle (pipe |)\n"+
+      "3. Inizia subito col primo ###\n"+
+      "4. La somma dei giorni deve corrispondere a: "+duration+"\n"+
+      "5. Nomi reali, scrivi in italiano\n\n"+
+      "ESEMPIO A (Venezia, 4gg):\n### SESTIERE DI SAN MARCO (2 giorni) [QUARTIERE]\n- **Cosa vedere**: Piazza San Marco - cuore della citta\n### CANNAREGIO (2 giorni) [QUARTIERE]\n- **Cosa vedere**: Ghetto ebraico - quartiere storico\n\n"+
+      "ESEMPIO B (Italia, 6gg):\n### VENEZIA (2 giorni) [CITTA]\n- **Cosa vedere**: Piazza San Marco\n### FIRENZE (2 giorni) [CITTA]\n- **Cosa vedere**: Uffizi\n### ROMA (2 giorni) [CITTA]\n- **Cosa vedere**: Colosseo"
+    await callAI(msg,1800,t=>setPlanText(t))
     setPlanLoad(false)
   }
 
@@ -288,26 +348,55 @@ export default function PlannerPage() {
   async function genRevised(){
     setStep(9); setRevLoad(true); setRevText(""); setMods("")
     const y=tripYear||detectYear(period)
-    const msg="Piano originale per "+dest+" ("+period+" "+y+"):\n"+planText+"\n\nModifiche richieste: "+mods+"\n\nRielabora il piano integrando le modifiche. STESSO FORMATO OBBLIGATORIO con ###. Scrivi in italiano."
+    const msg="Piano originale per "+dest+" ("+period+" "+y+"):\n"+planText+"\n\nModifiche richieste: "+mods+"\n\n"+
+      "Rielabora con STESSO FORMATO OBBLIGATORIO:\n### NOME (N giorni) [TIPO]\n- **Cosa vedere**: luogo - perche\n- **Cosa fare**: attivita - descrizione\n- **Da non perdere**: esperienza - perche\n\n"+
+      "REGOLE: solo ###, niente tabelle, includi TUTTE le citta originali piu quelle aggiunte, somma giorni = "+duration+". Scrivi in italiano."
     await callAI(msg,2000,t=>setRevText(t))
     setRevLoad(false)
   }
 
-  // ── ESTRAI CLUSTER ───────────────────────────────────
+  // ── ESTRAI CLUSTER (con classificazione quartiere/città) ──
   function extractClusters(text){
-    const lines=text.split("\n"); let out=[]; let cur=null
+    const lines=text.split("\n")
+    let out=[]; let cur=null
     for(const l of lines){
       const lt=l.trim()
       if(lt.slice(0,3)==="###"){
         if(cur)out.push(cur)
         const t=lt.replace(/^#+\s*/,"")
-        const nm=t.replace(/\(.*\)/,"").trim()
+        const typeMatch=t.match(/\[(QUARTIERE|CITTA|CITTÀ)\]/i)
+        const type=typeMatch?(typeMatch[1].toUpperCase().indexOf("QUART")>=0?"quartiere":"citta"):null
+        const nm=t.replace(/\[.*?\]/,"").replace(/\(.*\)/,"").trim()
         const dg=t.match(/\((\d+)/)
-        cur={name:nm,days:dg?parseInt(dg[1]):2}
+        cur={name:nm,days:dg?parseInt(dg[1]):null,type:type}
       }
     }
     if(cur)out.push(cur)
-    if(out.length===0)out=[{name:dest,days:null}]
+
+    if(out.length===0)out=[{name:dest,days:null,type:null}]
+
+    let allQuartiere=out.length>0
+    for(const o of out){ if(o.type!=="quartiere")allQuartiere=false }
+
+    const totalNights=parseDurationToNights(duration)
+
+    if(allQuartiere){
+      return [{name:dest, days:totalNights||2, type:"citta", isSingleCity:true}]
+    }
+
+    let sumDays=0
+    for(const c of out){ if(c.days)sumDays+=c.days }
+
+    if(totalNights && (sumDays===0 || sumDays!==totalNights)){
+      const n=out.length
+      const base=Math.floor(totalNights/n)
+      const rem=totalNights-(base*n)
+      out.forEach((o,i)=>{
+        o.days=base+(i<rem?1:0)
+        if(o.days<1)o.days=1
+      })
+    }
+
     return out
   }
 
@@ -339,8 +428,9 @@ export default function PlannerPage() {
     const starsQ=budget==="luxury"?"&stars=5":budget==="economico"?"&stars=2":"&stars=4"
     const bases=append?JSON.parse(JSON.stringify(hotelBases)):[]
     for(const cl of clusters){
-      let hotels=await fetchHotelsForCity(cl.name,budget)
-      if(!hotels)hotels=[{name:"Cerca hotel a "+cl.name,stars:3,zone:"centro",price:"vedi Booking",why:"Clicca per hotel disponibili",pros:["prezzi aggiornati","recensioni reali"],best:true,url:"https://www.booking.com/search.html?ss="+encodeURIComponent(cl.name)+starsQ}]
+      const searchCity=cl.isSingleCity?dest:cl.name
+      let hotels=await fetchHotelsForCity(searchCity,budget)
+      if(!hotels)hotels=[{name:"Cerca hotel a "+searchCity,stars:3,zone:"centro",price:"vedi Booking",why:"Clicca per hotel disponibili",pros:["prezzi aggiornati","recensioni reali"],best:true,url:"https://www.booking.com/search.html?ss="+encodeURIComponent(searchCity)+starsQ}]
       const existIdx=bases.findIndex(b=>b.city===cl.name)
       if(existIdx>=0){if(append)bases[existIdx].hotels=[...bases[existIdx].hotels,...hotels];else bases[existIdx].hotels=hotels}
       else bases.push({city:cl.name,days:cl.days||2,hotels})
@@ -354,7 +444,13 @@ export default function PlannerPage() {
     setStep(11); setDraftLoad(true); setDraftText("")
     const y=tripYear||detectYear(period)
     const activeText=(revText||planText).slice(0,500)
-    const msg="Itinerario bozza per "+dest+", "+period+" "+y+", "+duration+", "+style+", budget "+budget+", alloggio "+hotel+", "+trav()+".\nPiano visite:\n"+activeText+"\n\nStruttura ogni giorno:\n**Giorno N - Titolo**\nMATTINA\n- attivita\nPOMERIGGIO\n- attivita\nSERA\n- attivita\n---\n\n## LOGISTICA GENERALE\n- Trasporti\n- Pagamenti\n- App utili\nScrivi in italiano."
+    const msg="Itinerario bozza per "+dest+", "+period+" "+y+", "+duration+", "+style+", budget "+budget+", alloggio "+hotel+", "+trav()+".\n"+
+      "Piano visite:\n"+activeText+"\n\n"+
+      "FORMATO OBBLIGATORIO, ogni elemento su riga separata:\n\n"+
+      "**Giorno 1 - Titolo del giorno**\n\nMATTINA\n- Attivita 1 (tempo percorrenza)\n- Attivita 2 (tempo percorrenza)\n\nPOMERIGGIO\n- Attivita 1 (tempo percorrenza)\n- Attivita 2 (tempo percorrenza)\n\nSERA\n- Attivita 1\n\n---\n\n"+
+      "Ripeti per ogni giorno. REGOLE:\n1. MATTINA/POMERIGGIO/SERA su riga isolata, maiuscolo\n2. Vai a capo prima delle attivita\n3. Ogni attivita inizia con - su riga separata\n4. Niente testo descrittivo lungo attaccato alle sezioni\n5. Riga vuota tra sezioni\n\n"+
+      "## LOGISTICA GENERALE\n- Trasporti: come spostarsi\n- Pagamenti: carta/contanti\n- App utili: 2-3 app\n- Prenotazioni essenziali\n- Budget indicativo\n"+
+      "NO orari precisi. Ottimizza spostamenti per posizione alloggio. Scrivi in italiano."
     await callAI(msg,3000,t=>setDraftText(t))
     setDraftLoad(false)
   }
@@ -386,7 +482,7 @@ export default function PlannerPage() {
   }
 
   function resetAll(){
-    setStep(1);setDest("");setPeriod("");setTripYear(CY);setTravType("");setAdults(2);setChildren(0);setChildAges([])
+    setStep(1);setDest("");setPeriod("");setStartDate("");setEndDate("");setTripYear(CY);setTravType("");setAdults(2);setChildren(0);setChildAges([])
     setDuration("");setStyle("");setBudget("");setDeparture("");setFmt("mps");setMods("");setWantsFood(null)
     setInp("");setAiPer("");setPlanText("");setRevText("");setDraftText("");setFoodText("");setFinText("")
     setHotelBases([]);setSelKeys([]);setSelNames([]);setSelStr("");setExclHotels([]);setGuide(null);setShowCust(false);setCustH("")
@@ -400,6 +496,10 @@ export default function PlannerPage() {
   function Btn({label,ghost,style:st,onClick,disabled}){return <button className={`btn ${ghost?"btno":"btng"}`} style={st||{}} onClick={onClick} disabled={disabled||false}>{label}</button>}
   function YN({icon,title,sub,onClick}){return <div className="ync" onClick={onClick}><div style={{fontSize:26,marginBottom:8}}>{icon}</div><div style={{fontSize:14,color:GL,fontWeight:500,marginBottom:4}}>{title}</div><div style={{fontSize:11,color:"#666"}}>{sub}</div></div>}
   function Badge({text}){return <div className="badge">{text}</div>}
+  function BackBtn(){
+    if(step<=1)return null
+    return <button className="back" onClick={goBack}>← Torna indietro</button>
+  }
 
   function HCard({h,bi,city}){
     const nm=h.name||h.nome||"Hotel"
@@ -448,6 +548,33 @@ export default function PlannerPage() {
 
   const metaTags=[period,travType,adults+" adult"+(adults>1?"i":"o")+(children>0?" + "+children+" bambin"+(children>1?"i":"o"):""),duration,style,budget,selStr].filter(Boolean)
 
+  // riepilogo bozza (giorni → attività brevi) per lo step Guide
+  const draftClusters=(function(){
+    const text=draftText||""
+    const lines=text.split("\n")
+    const giorni=[]; let cur=null
+    for(const l0 of lines){
+      const l=l0.trim()
+      if(l.match(/^\*{0,2}giorno\s*\d+/i)){
+        if(cur)giorni.push(cur)
+        const title=l.replace(/\*\*/g,"").trim()
+        cur={title:title,items:[]}
+      } else if(cur&&(l.slice(0,1)==="-"||l.slice(0,1)==="*")&&l.length>2){
+        const item=l.slice(1).trim().replace(/\*\*/g,"")
+        const lowIt=item.toLowerCase()
+        if(item.length>3&&lowIt.indexOf("trasport")<0&&lowIt.indexOf("pagament")<0&&lowIt.indexOf("budget")<0&&lowIt.indexOf("app utili")<0&&lowIt.indexOf("prenotazion")<0){
+          let syn=item.replace(/\s*\([^)]*\)\s*$/,"").trim()
+          const cutIdx=syn.search(/\s[-–]\s|:\s|,\s(per|con|dove|che|e\s)/i)
+          if(cutIdx>10)syn=syn.slice(0,cutIdx)
+          if(syn.length>55)syn=syn.slice(0,52).trim()+"..."
+          if(cur.items.length<4)cur.items.push(syn)
+        }
+      }
+    }
+    if(cur)giorni.push(cur)
+    return giorni
+  })()
+
   return (
     <>
       <style>{CSS}</style>
@@ -474,6 +601,7 @@ export default function PlannerPage() {
           <div className="dl"/>
 
           {step<=14&&<div className="prog">{progressBar}</div>}
+          {step>1&&step<=14&&<BackBtn/>}
 
           {/* S1 */}
           {step===1&&<div className="card">
@@ -490,6 +618,23 @@ export default function PlannerPage() {
             <div className="tt">📅 Quando vuoi partire?</div>
             <div className="ht">Stagionalità per {dest}</div>
             <ABox text={aiPer} loading={aiPerLoad} lt="Analizzo stagionalità..."/>
+
+            <div style={{marginBottom:"1.2rem"}}>
+              <div style={{fontSize:12,color:G,marginBottom:8,fontWeight:600}}>🗓️ Scegli le date esatte (opzionale)</div>
+              <div className="dpick">
+                <div>
+                  <div style={{fontSize:11,color:"#777",marginBottom:4}}>Partenza</div>
+                  <input type="date" className="inp" style={{width:"100%",colorScheme:"dark"}} value={startDate} onChange={e=>setStartDate(e.target.value)}/>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:"#777",marginBottom:4}}>Ritorno</div>
+                  <input type="date" className="inp" style={{width:"100%",colorScheme:"dark"}} value={endDate} onChange={e=>setEndDate(e.target.value)}/>
+                </div>
+              </div>
+              {(startDate&&endDate)&&<Btn label="Conferma date →" style={{marginTop:10}} onClick={confirmDates}/>}
+            </div>
+
+            <div style={{fontSize:12,color:"#666",margin:"1rem 0 .8rem",borderTop:".5px solid "+BRD,paddingTop:"1rem"}}>Oppure scegli un periodo generico</div>
             <div className="chips">{MONTHS.map(mo=><Chip key={mo} label={mo} onClick={()=>{setPeriod(mo);setTripYear(detectYear(mo));setStep(3)}}/>)}</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:10,marginTop:10}}>{SEASONS.map(s=><Chip key={s} label={s} onClick={()=>{setPeriod(s);setStep(3)}}/>)}</div>
           </div>}
@@ -617,23 +762,41 @@ export default function PlannerPage() {
             </div>}
           </div>}
 
-          {/* S12 */}
-          {step===12&&<div className="card">
+          {/* S12 — con riepilogo bozza affiancato */}
+          {step===12&&<div className="card" style={{maxWidth:780}}>
             <Badge text={`🧭 Guide · ${dest}`}/>
             <div className="tt">Vuoi una guida turistica?</div>
             <div className="ht">Guide locali certificate lungo il percorso</div>
-            {guide===null&&<div className="yn">
-              <YN icon="🙋" title="Sì, voglio una guida" sub="Scegli giorni e lingua" onClick={()=>setGuide("yes")}/>
-              <YN icon="🚶" title="No, esploro da solo" sub="Procedi senza guida" onClick={()=>{setGuide(false);setStep(13)}}/>
-            </div>}
-            {guide==="yes"&&<div>
-              <div style={{fontSize:12,color:G,marginBottom:6,marginTop:".5rem"}}>In quali giorni?</div>
-              <div className="chips" style={{marginBottom:"1rem"}}>{["Tutto il viaggio","Solo alcuni giorni"].map(o=><Chip key={o} label={o} sel={guideDays===o} onClick={()=>setGuideDays(o)}/>)}</div>
-              {guideDays==="Solo alcuni giorni"&&<input className="inp" style={{marginBottom:"1rem",width:"100%"}} placeholder="Es. Giorno 1, Giorno 3..." value={guideCustom} onChange={e=>setGuideCustom(e.target.value)}/>}
-              <div style={{fontSize:12,color:G,marginBottom:6}}>Lingua della guida</div>
-              <div className="chips" style={{marginBottom:"1.4rem"}}>{LANGS.map(l=><Chip key={l} label={l} sel={guideLang===l} onClick={()=>setGuideLang(l)}/>)}</div>
-              <Btn label="✅ Confermo →" onClick={()=>{setGuide({days:guideDays==="Solo alcuni giorni"?guideCustom:"Tutto il viaggio",language:guideLang});setStep(13)}}/>
-            </div>}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
+              <div>
+                {guide===null&&<div className="yn">
+                  <YN icon="🙋" title="Sì, voglio una guida" sub="Scegli giorni e lingua" onClick={()=>setGuide("yes")}/>
+                  <YN icon="🚶" title="No, esploro da solo" sub="Procedi senza guida" onClick={()=>{setGuide(false);setStep(13)}}/>
+                </div>}
+                {guide==="yes"&&<div>
+                  <div style={{fontSize:12,color:G,marginBottom:6,marginTop:".5rem"}}>In quali giorni?</div>
+                  <div className="chips" style={{marginBottom:"1rem"}}>{["Tutto il viaggio","Solo alcuni giorni"].map(o=><Chip key={o} label={o} sel={guideDays===o} onClick={()=>setGuideDays(o)}/>)}</div>
+                  {guideDays==="Solo alcuni giorni"&&<input className="inp" style={{marginBottom:"1rem",width:"100%"}} placeholder="Es. Giorno 1, Giorno 3..." value={guideCustom} onChange={e=>setGuideCustom(e.target.value)}/>}
+                  <div style={{fontSize:12,color:G,marginBottom:6}}>Lingua della guida</div>
+                  <div className="chips" style={{marginBottom:"1.4rem"}}>{LANGS.map(l=><Chip key={l} label={l} sel={guideLang===l} onClick={()=>setGuideLang(l)}/>)}</div>
+                  <Btn label="✅ Confermo →" onClick={()=>{setGuide({days:guideDays==="Solo alcuni giorni"?guideCustom:"Tutto il viaggio",language:guideLang});setStep(13)}}/>
+                </div>}
+              </div>
+              <div style={{background:"#111",border:".5px solid #2a2a2a",borderRadius:12,padding:"14px 16px",maxHeight:360,overflowY:"auto"}}>
+                <div style={{fontSize:11,letterSpacing:"2px",color:G,textTransform:"uppercase",fontWeight:600,marginBottom:"0.8rem"}}>Riepilogo itinerario</div>
+                {draftClusters.length===0
+                  ? <div style={{fontSize:12,color:"#666"}}>{draftLoad?"Sto generando la bozza...":"La bozza dell'itinerario non è ancora disponibile."}</div>
+                  : draftClusters.map((g,gi)=>(
+                      <div key={gi} style={{marginBottom:"1rem",paddingBottom:"0.8rem",borderBottom:gi<draftClusters.length-1?".5px solid #1a1a1a":"none"}}>
+                        <div style={{fontSize:12,color:GL,fontWeight:600,marginBottom:"0.4rem"}}>{g.title}</div>
+                        {g.items.length>0
+                          ? g.items.map((it,ii)=><div key={ii} style={{display:"flex",gap:6,fontSize:11,color:"#aaa",marginBottom:2,lineHeight:1.5}}><span style={{color:G,flexShrink:0}}>◆</span><span>{it}</span></div>)
+                          : <div style={{fontSize:11,color:"#555"}}>Attività da definire</div>}
+                      </div>
+                    ))
+                }
+              </div>
+            </div>
           </div>}
 
           {/* S13 */}

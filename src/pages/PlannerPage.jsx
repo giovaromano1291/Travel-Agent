@@ -102,7 +102,7 @@ function mdHtml(t) {
 
 async function callAI(userMsg, maxTok = 1000, onChunk) {
   try {
-      const res = await fetch('/api/chat', {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -646,7 +646,7 @@ export default function PlannerPage() {
   async function genDraft(hotel) {
     setStep(11); setDraftLoad(true); setDraftText('');
     const y = tripYear || detectYear(period);
-    const activeText = (revText || planText).slice(0, 500);
+    const activeText = (revText || planText).slice(0, 1500);
     const msg =
       `Itinerario bozza per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, alloggio ${hotel}, ${trav()}.\n` +
       `Piano visite:\n${activeText}\n\n` +
@@ -654,7 +654,7 @@ export default function PlannerPage() {
       `REGOLE: MATTINA/POMERIGGIO/SERA su riga isolata maiuscolo. Ogni attivita inizia con - su riga separata. Riga vuota tra sezioni.\n\n` +
       `## LOGISTICA GENERALE\nOGNI punto su riga separata con -:\n- Trasporti: ...\n- Pagamenti: ...\n- App utili: ...\n- Prenotazioni: ...\n- Budget: ...\n` +
       `Scrivi in italiano.`;
-    await callAI(msg, 3000, t => setDraftText(t));
+    await callAI(msg, 8000, t => setDraftText(t));
     setDraftLoad(false);
   }
 

@@ -134,20 +134,52 @@ async function callAI(userMsg, maxTok = 1000, onChunk) {
 
 /* ─── Distance helper (Haversine) ──────────────────────────────────────── */
 const COORDS = {
+  // Italia
   roma:[41.9,12.5],milan:[45.5,9.2],milano:[45.5,9.2],napoli:[40.8,14.3],
   firenze:[43.8,11.2],venezia:[45.4,12.3],torino:[45.1,7.7],bologna:[44.5,11.3],
   genova:[44.4,8.9],palermo:[38.1,13.4],bari:[41.1,16.9],catania:[37.5,15.1],
   verona:[45.4,11.0],trieste:[45.7,13.8],parma:[44.8,10.3],modena:[44.6,10.9],
   padova:[45.4,11.9],bergamo:[45.7,9.7],brescia:[45.5,10.2],lecce:[40.4,18.2],
+  trento:[46.1,11.1],perugia:[43.1,12.4],cagliari:[39.2,9.1],reggio:[38.1,15.7],
+  // Europa
   paris:[48.9,2.3],parigi:[48.9,2.3],londra:[51.5,-0.1],london:[51.5,-0.1],
   berlin:[52.5,13.4],berlino:[52.5,13.4],madrid:[40.4,-3.7],barcellona:[41.4,2.2],
   barcelona:[41.4,2.2],amsterdam:[52.4,4.9],vienna:[48.2,16.4],praga:[50.1,14.4],
   budapest:[47.5,19.1],bruxelles:[50.8,4.4],zurigo:[47.4,8.5],ginevra:[46.2,6.1],
   monaco:[48.1,11.6],munich:[48.1,11.6],francoforte:[50.1,8.7],lisbona:[38.7,-9.1],
-  atene:[37.9,23.7],istanbul:[41.0,29.0],cairo:[30.0,31.2],dubai:[25.2,55.3],
-  'new york':[40.7,-74.0],'los angeles':[34.1,-118.2],chicago:[41.9,-87.6],
+  atene:[37.9,23.7],istanbul:[41.0,29.0],varsavia:[52.2,21.0],stoccolma:[59.3,18.1],
+  oslo:[59.9,10.7],copenaghen:[55.7,12.6],helsinki:[60.2,25.0],dublino:[53.3,-6.3],
+  edimburgo:[55.9,-3.2],lione:[45.7,4.8],marsiglia:[43.3,5.4],nizza:[43.7,7.3],
+  siviglia:[37.4,-6.0],valencia:[39.5,-0.4],porto:[41.1,-8.6],cracovia:[50.1,20.0],
+  bucarest:[44.4,26.1],sofia:[42.7,23.3],belgrado:[44.8,20.5],zagabria:[45.8,16.0],
+  // Medio Oriente e Africa
+  cairo:[30.0,31.2],dubai:[25.2,55.3],nairobi:[-1.3,36.8],kenya:[-0.0,37.9],
+  doha:[25.3,51.5],abu dhabi:[24.5,54.4],marrakech:[31.6,-8.0],casablanca:[33.6,-7.6],
+  johannesburg:[-26.2,28.0],capetown:[-33.9,18.4],'cape town':[-33.9,18.4],
+  // Asia
   tokyo:[35.7,139.7],osaka:[34.7,135.5],bangkok:[13.8,100.5],singapore:[1.3,103.8],
-  sydney:[-33.9,151.2],nairobi:[-1.3,36.8],kenya:[-0.0,37.9],miami:[25.8,-80.2],toronto:[43.7,-79.4],
+  pechino:[39.9,116.4],shanghai:[31.2,121.5],'hong kong':[22.3,114.2],
+  seoul:[37.6,127.0],delhi:[28.6,77.2],mumbai:[19.1,72.9],bali:[-8.4,115.2],
+  // America del Nord - USA
+  'new york':[40.7,-74.0],'new york city':[40.7,-74.0],nyc:[40.7,-74.0],
+  'los angeles':[34.1,-118.2],chicago:[41.9,-87.6],miami:[25.8,-80.2],
+  florida:[27.7,-82.6],orlando:[28.5,-81.4],'miami beach':[25.8,-80.1],
+  'key west':[24.6,-81.8],'las vegas':[36.2,-115.2],'san francisco':[37.8,-122.4],
+  boston:[42.4,-71.1],seattle:[47.6,-122.3],houston:[29.8,-95.4],dallas:[32.8,-96.8],
+  atlanta:[33.7,-84.4],nashville:[36.2,-86.8],denver:[39.7,-104.9],phoenix:[33.4,-112.1],
+  hawaii:[21.3,-157.8],alaska:[64.2,-153.4],
+  // America del Nord - Canada/Messico
+  toronto:[43.7,-79.4],vancouver:[49.3,-123.1],montreal:[45.5,-73.6],
+  cancun:[21.2,-86.9],messico:[23.6,-102.6],mexico:[23.6,-102.6],'mexico city':[19.4,-99.1],
+  // America del Sud
+  brasile:[-14.2,-51.9],brasil:[-14.2,-51.9],'rio de janeiro':[-22.9,-43.2],
+  'buenos aires':[-34.6,-58.4],lima:[-12.0,-77.0],bogota:[4.7,-74.1],
+  santiago:[-33.5,-70.6],
+  // Oceania
+  sydney:[-33.9,151.2],melbourne:[-37.8,145.0],auckland:[-36.9,174.8],
+  // Isole e destinazioni tropicali
+  cuba:[21.5,-79.5],giamaica:[18.1,-77.3],maldive:[3.2,73.2],
+  mauritius:[-20.3,57.6],seychelles:[-4.7,55.5],
 };
 
 function getCoords(place) {
@@ -451,9 +483,38 @@ export default function PlannerPage() {
   }
 
   /* ── distance check ── */
+  const NEAR_DESTINATIONS = [
+    'italia','italy','sicilia','sardegna','puglia','toscana','lombardia','veneto',
+    'piemonte','liguria','campania','calabria','basilicata','abruzzo','molise',
+    'umbria','marche','lazio','friuli','trentino','valdaosta','emilia','romagna',
+    'francia','france','spagna','spain','portogallo','portugal','germania','germany',
+    'austria','svizzera','switzerland','belgio','belgium','olanda','netherlands',
+    'paesi bassi','lussemburgo','luxembourg','liechtenstein',
+    'slovenia','croazia','croatia','bosnia','serbia','montenegro','albania','kosovo',
+    'macedonia','grecia','greece','bulgaria','romania','ungheria','hungary',
+    'slovacchia','czechia','cechia','polonia','poland',
+    'danimarca','denmark','svezia','sweden','norvegia','norway','finlandia','finland',
+    'estonia','lettonia','lituania','irlanda','ireland','galles','scozia','inghilterra',
+    'regno unito','uk','gran bretagna',
+    'parigi','paris','londra','london','berlino','berlin','madrid','barcellona',
+    'barcelona','amsterdam','vienna','praga','budapest','bruxelles','zurigo',
+    'ginevra','monaco','francoforte','lisbona','atene','varsavia','stoccolma',
+    'oslo','copenaghen','helsinki','dublino','edimburgo','lione','marsiglia',
+    'nizza','siviglia','valencia','porto','cracovia','bucarest','sofia','belgrado',
+    'zagabria','lubiana','sarajevo','tirana','riga','vilnius','tallinn',
+    'istanbul','turchia','turkey','tunisia','marocco','morocco','egitto',
+  ];
   function checkDistance(dep, dst) {
-    const c1 = getCoords(dep), c2 = getCoords(dst);
-    setDistClose(c1 && c2 ? haversine(c1, c2) < 1000 : true);
+    const dstLower = (dst || '').toLowerCase().trim();
+    const isNear = NEAR_DESTINATIONS.some(place =>
+      dstLower.includes(place) || place.includes(dstLower)
+    );
+    if (isNear) {
+      const c1 = getCoords(dep), c2 = getCoords(dst);
+      setDistClose(c1 && c2 ? haversine(c1, c2) < 1200 : true);
+    } else {
+      setDistClose(false);
+    }
   }
 
   /* ── AI flows ── */

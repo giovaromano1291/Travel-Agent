@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../hooks/useAuth";
+import "../planner.css";
 
 // ─── COSTANTI ────────────────────────────────────────────────────────────────
 const G = "#C9A84C", GL = "#e8c97a", DK = "#0d0d0d", BRD = "#2a2a2a", CY = 2026;

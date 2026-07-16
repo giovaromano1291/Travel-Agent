@@ -62,6 +62,11 @@ function mdHtml(t) {
   t = t.replace(/\r/g, '');
   // Rimuovi marcatori heading rimasti come testo grezzo, ma mantieni il contenuto
   t = t.replace(/^#{1,3}\s+(.*)$/gm, '$1');
+  // Spezza "**Giorno N...**" dal testo che segue sulla stessa riga
+  // Es: "**Giorno 2 – Titolo** testo mattina" → "**Giorno 2 – Titolo**\ntesto mattina"
+  t = t.replace(/(\*\*Giorno\s+\d+[^*]*\*\*)\s+([^*\n])/g, '$1\n$2');
+  // Spezza "Giorno N – Titolo: testo" dove il titolo è seguito da attività
+  t = t.replace(/^(\*{0,2}Giorno\s+\d+[^\n]+?)(\s+[-◆•]\s)/gm, '$1\n$2');
   const MPS = ['Mattina','MATTINA','Pomeriggio','POMERIGGIO','Sera','SERA'];
   const lns = t.split('\n');
   const out = [];
@@ -652,39 +657,49 @@ export default function PlannerPage() {
   }
 
   async function fetchHotelsForCity(cityName, bdg) {
-    const hint = bdg === 'luxury'
-      ? '5 stelle lusso (Fascia 400-800 eur/notte). Includi catene come Four Seasons, Rocco Forte, Belmond, Aman, o hotel boutique di lusso locali.'
-      : bdg === 'economico'
-      ? '2-3 stelle o B&B boutique (Fascia 50-90 eur/notte). Hotel ben recensiti con ottimo rapporto qualita/prezzo.'
-      : '3-4 stelle (Fascia 100-200 eur/notte). Hotel di qualita con buoni servizi, buona posizione, buone recensioni.';
-    for (let att = 1; att <= 2; att++) {
+    const priceHint = bdg === 'luxury' ? '400-800' : bdg === 'economico' ? '50-90' : '100-200';
+    const starsHint = bdg === 'luxury' ? '5' : bdg === 'economico' ? '2-3' : '3-4';
+    const bookingUrl = `https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}`;
+
+    // 1 hotel alla volta: chiamate piccole (500 token) affidabili su tutti i dispositivi
+    async function fetchOneHotel(position, excludeNames) {
+      const posLabel = position === 0
+        ? 'il MIGLIORE qualita/prezzo (best:true)'
+        : position === 1 ? 'una buona alternativa (best:false)'
+        : 'una terza opzione diversa (best:false)';
+      const exclude = excludeNames.length > 0
+        ? ` NON ripetere questi hotel: ${excludeNames.join(', ')}.` : '';
+      const stars = starsHint.includes('-') ? starsHint.split('-')[1] : starsHint;
       const msg =
-        `Sei un esperto di hotel. Elenca 3 hotel con NOMI PROPRI REALI (non generici) a ${cityName}, TUTTI fascia ${bdg} (${hint}).` +
-        (att > 1 ? ' ATTENZIONE: usa nomi di hotel VERI che esistono a ${cityName}. NON usare nomi come Hotel A, Hotel B, NomeReale.' : '') +
-        `\nTutti e 3 devono essere fascia ${bdg}. Prezzo indicativo reale in euro/notte. best:true solo per il migliore qualita/prezzo.\n` +
-        `Rispondi SOLO con questo JSON (nessun testo prima o dopo):\n` +
-        `[{"name":"[nome hotel reale]","stars":4,"zone":"quartiere reale","price":"€XXX/notte","why":"motivo specifico","pros":["pro1","pro2","pro3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
-        `{"name":"[nome hotel reale 2]","stars":4,"zone":"quartiere","price":"€YYY/notte","why":"motivo","pros":["pro1","pro2","pro3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
-        `{"name":"[nome hotel reale 3]","stars":4,"zone":"quartiere","price":"€ZZZ/notte","why":"motivo","pros":["pro1","pro2","pro3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
-      const txt = await callAI(msg, isMobile() ? 1200 : 2000, null);
-      if (!txt) continue;
+        `Hotel REALE a ${cityName}, fascia ${bdg}, circa €${priceHint}/notte.` +
+        ` Scegli ${posLabel}.${exclude}` +
+        `\nRispondi SOLO con JSON oggetto (nessun testo):` +
+        `{"name":"Nome Hotel Reale","stars":${stars},"zone":"quartiere","price":"€XXX/notte","why":"motivo","pros":["p1","p2","p3"],"best":${position===0},"url":"${bookingUrl}"}`;
+      const txt = await callAI(msg, 500, null);
+      if (!txt) return null;
       try {
-        const m = txt.match(/\[[\s\S]*?\]/);
+        const m = txt.match(/\{[\s\S]*?\}/);
         if (m) {
-          const arr = JSON.parse(m[0]);
-          if (Array.isArray(arr) && arr.length > 0) {
-            if (!arr.some(h => h.best)) arr[0].best = true;
-            // Se abbiamo almeno 3, ritorna i primi 3
-            if (arr.length >= 3) return arr.slice(0, 3);
-            // Se abbiamo meno di 3 e siamo al secondo tentativo, usa quelli disponibili
-            if (att === 2) return arr;
-            // Se abbiamo meno di 3 al primo tentativo, riprova
-          }
+          const obj = JSON.parse(m[0]);
+          if (obj && obj.name && !obj.name.includes('[') && obj.name.length > 3) return obj;
         }
       } catch {}
+      return null;
+    }
+
+    const hotels = [];
+    const names = [];
+    for (let i = 0; i < 3; i++) {
+      const h = await fetchOneHotel(i, names);
+      if (h) { hotels.push(h); names.push(h.name); }
+    }
+    if (hotels.length > 0) {
+      if (!hotels.some(h => h.best)) hotels[0].best = true;
+      return hotels;
     }
     return null;
   }
+
 
   async function genHotels(append) {
     setStep(10); setHotelLoad(true);

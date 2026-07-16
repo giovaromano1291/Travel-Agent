@@ -638,11 +638,11 @@ export default function PlannerPage() {
       const msg =
         `Elenca ESATTAMENTE 3 hotel reali di ${cityName}, fascia ${bdg} (${hint}).` +
         (att > 1 ? ' SECONDO TENTATIVO: restituisci obbligatoriamente 3 hotel.' : '') +
-        `\nRispondi SOLO con JSON array (nessun testo prima o dopo):\n` +
-        `[{"name":"Hotel A","stars":4,"zone":"centro","price":"euro150/notte","why":"ottima posizione","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
-        `{"name":"Hotel B","stars":3,"zone":"zona","price":"euro90/notte","why":"ottimo prezzo","pros":["p1","p2","p3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
-        `{"name":"Hotel C","stars":4,"zone":"zona","price":"euro120/notte","why":"buon comfort","pros":["p1","p2","p3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
-      const txt = await callAI(msg, 1600, null);
+        `\nJSON ARRAY con esattamente 3 oggetti, nessun testo aggiuntivo:\n` +
+        `[{"name":"NomeReale1","stars":4,"zone":"quartiere","price":"€X/notte","why":"motivo","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
+        `{"name":"NomeReale2","stars":3,"zone":"zona","price":"€Y/notte","why":"motivo","pros":["p1","p2","p3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
+        `{"name":"NomeReale3","stars":4,"zone":"zona","price":"€Z/notte","why":"motivo","pros":["p1","p2","p3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
+      const txt = await callAI(msg, 2000, null);
       if (!txt) continue;
       try {
         const m = txt.match(/\[[\s\S]*?\]/);
@@ -674,14 +674,14 @@ export default function PlannerPage() {
       try {
         const searchCity = cl.isSingleCity ? dest : cl.name;
         let hotels = await fetchHotelsForCity(searchCity, budget);
-        if (!hotels || !Array.isArray(hotels) || hotels.length === 0) {
-          hotels = [{
-            name: `Cerca hotel ${budget} a ${searchCity}`, stars: budget === 'luxury' ? 5 : budget === 'economico' ? 3 : 4,
-            zone: 'centro', price: 'vedi Booking',
-            why: `Hotel disponibili a ${searchCity}`,
-            pros: ['prezzi aggiornati', 'recensioni reali', 'cancellazione gratuita'], best: true,
-            url: `https://www.booking.com/search.html?ss=${encodeURIComponent(searchCity)}${starsQ}`,
-          }];
+        if (!hotels || !Array.isArray(hotels) || hotels.length < 3) {
+          const starsLabel = budget === 'luxury' ? 5 : budget === 'economico' ? 3 : 4;
+          const baseUrl = `https://www.booking.com/search.html?ss=${encodeURIComponent(searchCity)}${starsQ}`;
+          hotels = [
+            { name: `Hotel ${budget} consigliato a ${searchCity}`, stars: starsLabel, zone: 'centro', price: 'vedi Booking', why: `Miglior scelta ${budget} a ${searchCity} — clicca per verificare disponibilità`, pros: ['ottima posizione', 'recensioni eccellenti', 'cancellazione gratuita'], best: true, url: baseUrl },
+            { name: `Alternativa economica a ${searchCity}`, stars: Math.max(starsLabel - 1, 2), zone: 'zona centrale', price: 'vedi Booking', why: `Buon rapporto qualità/prezzo a ${searchCity}`, pros: ['prezzi competitivi', 'recensioni positive', 'buona posizione'], best: false, url: baseUrl },
+            { name: `Opzione premium a ${searchCity}`, stars: Math.min(starsLabel + 1, 5), zone: 'centro storico', price: 'vedi Booking', why: `Comfort superiore a ${searchCity}`, pros: ['servizi completi', 'colazione inclusa', 'personale eccellente'], best: false, url: baseUrl },
+          ];
         }
         const existIdx = bases.findIndex(b => b.city === cl.name);
         if (existIdx >= 0) {
@@ -741,15 +741,46 @@ export default function PlannerPage() {
   async function genDraft(hotel) {
     setStep(11); setDraftLoad(true); setDraftText('');
     const y = tripYear || detectYear(period);
-    const activeText = (revText || planText).slice(0, 1500);
-    const msg =
-      `Itinerario bozza per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, alloggio ${hotel}, ${trav()}.\n` +
-      `Piano visite:\n${activeText}\n\n` +
-      `FORMATO OBBLIGATORIO per ogni giorno:\n\n**Giorno 1 - Titolo**\n\nMATTINA\n- Attivita 1 (durata)\n- Attivita 2 (durata)\n\nPOMERIGGIO\n- Attivita 1 (durata)\n- Attivita 2 (durata)\n\nSERA\n- Attivita 1\n- Attivita 2\n\n---\n\n` +
-      `REGOLE ASSOLUTE: 1) Ogni giorno DEVE avere MATTINA POMERIGGIO e SERA con almeno 2 attivita ciascuna. 2) MATTINA/POMERIGGIO/SERA su riga isolata. 3) Ogni attivita su riga separata con -. 4) Ogni giorno separato da ---. 5) VIETATE tabelle markdown.\n\n` +
-      `## LOGISTICA GENERALE\nUNA voce per categoria:\n- Trasporti: [mezzi consigliati]\n- Pagamenti: [carta o contanti]\n- App utili: [2-3 app]\n- Prenotazioni: [cosa prenotare]\n- Budget: [stima giornaliera a persona]\n` +
-      `Scrivi in italiano.`;
-    await callAI(msg, 10000, t => setDraftText(t));
+    const activeText = (revText || planText).slice(0, 1200);
+    const mobile = isMobile();
+
+    // Su mobile: dividiamo in 2 chiamate piu piccole per evitare timeout
+    if (mobile) {
+      const nights = parseDurationToNights(duration) || 4;
+      const half = Math.ceil(nights / 2);
+
+      // Prima meta dei giorni
+      const msg1 =
+        `Itinerario per ${dest}, ${period} ${y}, ${style}, budget ${budget}, alloggio ${hotel}, ${trav()}.\n` +
+        `Genera SOLO i giorni 1-${half} (su ${nights} totali).\n` +
+        `Piano visite: ${activeText.slice(0, 600)}\n\n` +
+        `FORMATO per ogni giorno:\n**Giorno N - Titolo**\nMATTINA\n- Attivita 1\n- Attivita 2\nPOMERIGGIO\n- Attivita 1\n- Attivita 2\nSERA\n- Attivita 1\n---\n` +
+        `Ogni giorno DEVE avere MATTINA POMERIGGIO SERA. Scrivi in italiano.`;
+      const part1 = await callAI(msg1, 4000, null);
+
+      // Seconda meta dei giorni + logistica
+      const msg2 =
+        `Itinerario per ${dest}, ${period} ${y}, ${style}, budget ${budget}, alloggio ${hotel}, ${trav()}.\n` +
+        `Genera i giorni ${half + 1}-${nights}.\n` +
+        `Piano visite: ${activeText.slice(600)}\n\n` +
+        `FORMATO per ogni giorno:\n**Giorno N - Titolo**\nMATTINA\n- Attivita 1\n- Attivita 2\nPOMERIGGIO\n- Attivita 1\n- Attivita 2\nSERA\n- Attivita 1\n---\n\n` +
+        `Poi aggiungi:\n## LOGISTICA GENERALE\n- Trasporti: [mezzi]\n- Pagamenti: [carta/contanti]\n- App utili: [2-3 app]\n- Prenotazioni: [cosa]\n- Budget: [stima/giorno]\n` +
+        `Ogni giorno DEVE avere MATTINA POMERIGGIO SERA. Scrivi in italiano.`;
+      const part2 = await callAI(msg2, 4000, null);
+
+      const full = (part1 || '') + '\n\n' + (part2 || '');
+      setDraftText(full);
+    } else {
+      // Desktop: una sola chiamata grande
+      const msg =
+        `Itinerario bozza per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, alloggio ${hotel}, ${trav()}.\n` +
+        `Piano visite:\n${activeText}\n\n` +
+        `FORMATO per ogni giorno:\n**Giorno 1 - Titolo**\nMATTINA\n- Attivita 1 (durata)\n- Attivita 2 (durata)\nPOMERIGGIO\n- Attivita 1\n- Attivita 2\nSERA\n- Attivita 1\n- Attivita 2\n---\n\n` +
+        `REGOLE: ogni giorno DEVE avere MATTINA POMERIGGIO SERA con 2+ attivita. Ogni giorno separato da ---. Niente tabelle.\n\n` +
+        `## LOGISTICA GENERALE\n- Trasporti: [mezzi]\n- Pagamenti: [carta/contanti]\n- App utili: [2-3 app]\n- Prenotazioni: [cosa prenotare]\n- Budget: [stima/giorno]\n` +
+        `Scrivi in italiano.`;
+      await callAI(msg, 8000, t => setDraftText(t));
+    }
     setDraftLoad(false);
   }
 

@@ -82,6 +82,10 @@ function mdHtml(t) {
   t = out.join('\n');
   t = t.replace(/\.[ \t]+-[ \t]+/g, '.\n- ');
   t = t.replace(/([.!?])\s+(Trasporti|Pagamenti|App utili|Prenotazioni|Budget|App|Visto|Valigia):/g, '$1\n- $2:');
+  // Forza newline dopo ## LOGISTICA GENERALE se seguito da testo sulla stessa riga
+  t = t.replace(/(LOGISTICA GENERALE)\s+(Trasporti|Pagamenti)/g, '$1\n- $2');
+  // Spezza "Budget Stimato" e nota finale su riga separata
+  t = t.replace(/([^\n])(Budget Stimato|Nota su |💡)/g, '$1\n$2');
   t = t.replace(/\n{3,}/g, '\n\n');
   return t
     .replace(/\*\*(.*?)\*\*/g, `<strong style='color:${GL};font-weight:500'>$1</strong>`)
@@ -90,7 +94,12 @@ function mdHtml(t) {
     .replace(/^### (.+)$/gm, (_, t) => {
       const label = t.match(/\[(quartiere|città|citta)\]/i)?.[0] || '';
       const name = t.replace(/\[.*?\]/g,'').trim();
-      const badge = label ? `<span style='font-size:10px;color:${G};background:#1a1400;border:.5px solid ${G};border-radius:10px;padding:2px 8px;margin-left:8px;font-family:Inter,sans-serif;font-weight:500'>${label.toLowerCase()}</span>` : '';
+      // Normalizza label: [CITTA] → città, [QUARTIERE] → quartiere
+      const labelNorm = label.replace(/\[/g,'').replace(/\]/g,'')
+        .replace(/CITT[AÀ]/i, 'città')
+        .replace(/QUARTIERE/i, 'quartiere')
+        .toLowerCase();
+      const badge = label ? `<span style='font-size:10px;color:${G};background:#1a1400;border:.5px solid ${G};border-radius:10px;padding:2px 8px;margin-left:8px;font-family:Inter,sans-serif;font-weight:500'>${labelNorm}</span>` : '';
       return `<div style='display:flex;align-items:center;gap:6px;margin:1.6rem 0 0.8rem;padding:10px 14px;background:linear-gradient(90deg,#1a1400,transparent);border-left:3px solid ${G};border-radius:0 8px 8px 0'><span style='font-family:Cormorant Garamond,serif;font-size:16px;font-weight:600;color:${GL}'>${name}</span>${badge}</div>`;
     })
     .replace(/^## (.+)$/gm, `<div style='font-size:11px;letter-spacing:2px;color:${G};text-transform:uppercase;margin:1.4rem 0 0.6rem;border-top:0.5px solid #2a2a2a;padding-top:1rem;font-weight:600'>$1</div>`)
@@ -99,7 +108,9 @@ function mdHtml(t) {
     .replace(/^POMERIGGIO$/gm, `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1.2rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Pomeriggio</span></div>`)
     .replace(/^SERA$/gm,       `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1.2rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Sera</span></div>`)
     .replace(/^---$/gm, `<div style='height:1px;background:#2a2a2a;margin:1.4rem 0'></div>`)
-    .replace(/^LINK (.+)$/gm, `<div style='margin:0.3rem 0 0.3rem 1rem;color:#6ab0ff;font-size:12px'>Prenota: $1</div>`)
+    .replace(/^LINK (.+)$/gm, `<div style='margin:0.3rem 0 0.3rem 1rem;font-size:12px'><a href='$1' target='_blank' rel='noreferrer' style='color:#6ab0ff;text-decoration:none'>🔗 $1</a></div>`)
+    // Converti link markdown [testo](url) in link cliccabili
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, `<a href='$2' target='_blank' rel='noreferrer' style='color:#6ab0ff;text-decoration:underline'>$1</a>`)
     .replace(/^[*-] (.+)$/gm, (_, p1) => {
       const lb = p1.replace(/^([A-Za-z\u00c0-\u00ff\s]+:)\s*/, `<strong style='color:${GL};font-weight:600'>$1</strong> `);
       return `<div style='display:flex;align-items:flex-start;gap:8px;margin:0.35rem 0;color:#ccc;font-size:13px;line-height:1.6'><span style='color:${G};flex-shrink:0'>◆</span><span>${lb}</span></div>`;
@@ -125,8 +136,17 @@ async function callAI(userMsg, maxTok = 1000, onChunk) {
 
     if (mobile) {
       // Su mobile: risposta JSON completa in una volta
-      const data = await res.json();
-      const text = data?.content?.[0]?.text || '';
+      let data;
+      try { data = await res.json(); } catch (e) { console.error('JSON parse error:', e); return ''; }
+      // Gestisci sia risposta streaming che non-streaming
+      let text = '';
+      if (data?.content) {
+        // Risposta non-streaming diretta
+        text = data.content.find(b => b.type === 'text')?.text || data.content?.[0]?.text || '';
+      } else if (data?.error) {
+        console.error('API error:', data.error);
+        return '';
+      }
       if (text && onChunk) onChunk(text);
       return text;
     }
@@ -633,10 +653,10 @@ export default function PlannerPage() {
 
   async function fetchHotelsForCity(cityName, bdg) {
     const hint = bdg === 'luxury'
-      ? '5 stelle lusso: Four Seasons, Rocco Forte, Belmond. Fascia 400+ eur/notte.'
+      ? '5 stelle lusso (Fascia 400-800 eur/notte). Includi catene come Four Seasons, Rocco Forte, Belmond, Aman, o hotel boutique di lusso locali.'
       : bdg === 'economico'
-      ? '2-3 stelle o B&B boutique. Fascia 60-120 eur/notte.'
-      : '3-4 stelle: NH Hotels, Starhotels, Marriott Courtyard. Fascia 120-250 eur/notte.';
+      ? '2-3 stelle o B&B boutique (Fascia 50-90 eur/notte). Hotel ben recensiti con ottimo rapporto qualita/prezzo.'
+      : '3-4 stelle (Fascia 100-200 eur/notte). Hotel di qualita con buoni servizi, buona posizione, buone recensioni.';
     for (let att = 1; att <= 2; att++) {
       const msg =
         `Sei un esperto di hotel. Elenca 3 hotel con NOMI PROPRI REALI (non generici) a ${cityName}, TUTTI fascia ${bdg} (${hint}).` +
@@ -646,7 +666,7 @@ export default function PlannerPage() {
         `[{"name":"[nome hotel reale]","stars":4,"zone":"quartiere reale","price":"€XXX/notte","why":"motivo specifico","pros":["pro1","pro2","pro3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
         `{"name":"[nome hotel reale 2]","stars":4,"zone":"quartiere","price":"€YYY/notte","why":"motivo","pros":["pro1","pro2","pro3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
         `{"name":"[nome hotel reale 3]","stars":4,"zone":"quartiere","price":"€ZZZ/notte","why":"motivo","pros":["pro1","pro2","pro3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
-      const txt = await callAI(msg, 2000, null);
+      const txt = await callAI(msg, isMobile() ? 1200 : 2000, null);
       if (!txt) continue;
       try {
         const m = txt.match(/\[[\s\S]*?\]/);
@@ -751,18 +771,28 @@ export default function PlannerPage() {
     const activeText = (revText || planText).slice(0, 1200);
     const mobile = isMobile();
 
-    // Su mobile: prompt compatto per stare nei limiti
+    // Su mobile: prompt MINIMO per evitare timeout iOS
     if (mobile) {
       const nights = parseDurationToNights(duration) || 4;
-      const msg =
-        `Bozza itinerario: ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, alloggio ${hotel}, ${trav()}.\n` +
-        `Piano: ${activeText.slice(0, 800)}\n\n` +
-        `Genera esattamente ${nights} giorni con questo formato PRECISO:\n` +
-        `**Giorno 1 - Titolo**\nMATTINA\n- attivita 1\n- attivita 2\nPOMERIGGIO\n- attivita 1\n- attivita 2\nSERA\n- attivita 1\n---\n` +
-        `Ripeti per tutti i ${nights} giorni. Ogni giorno DEVE avere MATTINA POMERIGGIO SERA.\n\n` +
-        `## LOGISTICA GENERALE\n- Trasporti: [mezzi]\n- Pagamenti: [carta/contanti]\n- App utili: [app]\n- Prenotazioni: [cosa]\n- Budget: [stima/giorno]\nScrivi in italiano.`;
-      const result = await callAI(msg, 6000, null);
-      setDraftText(result || '');
+      // Genera solo i giorni senza logistica per stare nei 3000 token
+      const msgGiorni =
+        `Itinerario ${dest} ${nights} giorni, ${style}, budget ${budget}.\n` +
+        `Formato: **Giorno N - Titolo** MATTINA - att1 - att2 POMERIGGIO - att1 - att2 SERA - att1 --- (separa ogni giorno con ---)\n` +
+        `Ogni giorno deve avere MATTINA POMERIGGIO SERA. Scrivi in italiano. Solo i giorni, nient'altro.`;
+      const giorni = await callAI(msgGiorni, 3000, null);
+
+      // Poi genera logistica separata
+      const msgLog =
+        `Logistica per viaggio a ${dest}, ${nights} giorni, budget ${budget}, alloggio ${hotel}.\n` +
+        `Scrivi in italiano:\n## LOGISTICA GENERALE\n- Trasporti: [come spostarsi]\n- Pagamenti: [carta/contanti]\n- App utili: [2-3 app]\n- Prenotazioni: [cosa prenotare]\n- Budget: [stima/giorno a persona]`;
+      const logistica = await callAI(msgLog, 1000, null);
+
+      const full = (giorni || '') + '\n\n' + (logistica || '');
+      if (full.trim().length < 50) {
+        setDraftText('Errore nel caricamento. Premi Rigenera per riprovare.');
+      } else {
+        setDraftText(full);
+      }
     } else {
       // Desktop: una sola chiamata grande
       const msg =
@@ -813,7 +843,7 @@ export default function PlannerPage() {
       `Formato giorni: ${formatStr}. Separa giorni con ---. Scrivi in italiano con ## per sezioni:\n` +
       `## PRESENTAZIONE DELLA DESTINAZIONE\n` +
       transportBlock +
-      `## ALLOGGIO\n${selStr}: zona e perche ottimale\nLINK https://www.booking.com/search.html?ss=${encodeURIComponent(dest)}\n` +
+      `## ALLOGGIO\nPer ogni citta/area selezionata, scrivi su righe separate:\n**[Nome Citta]** → [Nome Hotel scelto]\nLINK [url booking diretto dell'hotel]\n[Descrizione 1-2 righe: zona, caratteristiche, perche ottimale per l'itinerario]\n\nAlloggi selezionati: ${selStr}\nLINK https://www.booking.com/search.html?ss=${encodeURIComponent(dest)}\n` +
       `## ITINERARIO GIORNO PER GIORNO\nSEGUI ESATTAMENTE questa bozza approvata aggiungendo solo dettagli e link:\n${draftText.slice(0, 2500)}\n\nPer ogni attivita aggiungi: LINK url-biglietti${wantsFood ? ' e LINK url-ristorante' : ''}\n` +
       gdStr +
       `## ESPERIENZE LOCALI E CUCINA\n3-4 con LINK url\n` +

@@ -84,6 +84,14 @@
 .ync:hover{border-color:#C9A84C;background:#1a1400}
 .dpick{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
+/* Guide layout: 2 colonne desktop, colonna singola mobile */
+.guide-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
 /* Fix iOS: impedisce zoom automatico sugli input */
 @media screen and (-webkit-min-device-pixel-ratio: 0) {
   .inp, .ta { font-size: 16px; }
@@ -98,4 +106,8 @@
   .rbody { padding: 0 1.2rem 1.4rem }
   .rhead { padding: 1.2rem 1.2rem .8rem }
   .lgrid { grid-template-columns: 1fr }
+  /* Guide: su mobile metti il riepilogo SOTTO i pulsanti */
+  .guide-layout {
+    grid-template-columns: 1fr;
+  }
 }

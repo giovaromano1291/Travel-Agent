@@ -66,18 +66,30 @@ function isIOS() {
 function mdHtml(t) {
   t = t.replace(/\r/g, "");
   t = t.replace(/^# .+$/gm, "");
-  const MPS = ["Mattina","MATTINA","Pomeriggio","POMERIGGIO","Sera","SERA"];
+  // Rimuovi righe separatore tabella (|---|---|)
+  t = t.replace(/^[|\s]*[-|\s]{3,}[|\s]*$/gm, "");
+  // Converti righe tabella in testo semplice (rimuovi pipe)
+  t = t.replace(/^\|(.+)\|\s*$/gm, (m, inner) => {
+    return inner.split("|").map(c => c.trim()).filter(Boolean).join(" — ");
+  });
+  // Rimuovi ** orfani (non chiusi sulla stessa riga)
+  t = t.replace(/^\*\*([^*\n]*)$/gm, "$1");
+  t = t.replace(/^\*\*\s*/gm, "");
+  // Normalizza MATTINA/POMERIGGIO/SERA: assicura che siano su riga isolata
+  t = t.replace(/\b(MATTINA|POMERIGGIO|SERA)\b/g, "\n$1\n");
+  // Normalizza varianti minuscole
+  t = t.replace(/^(Mattina|Pomeriggio|Sera)$/gm, m => m.toUpperCase());
   const lns = t.split("\n"); const out = [];
   for (let li = 0; li < lns.length; li++) {
-    let ln = lns[li]; let found = false;
-    for (let mi = 0; mi < MPS.length; mi++) {
-      const tag = MPS[mi];
-      if (ln.length > tag.length && ln.slice(-tag.length) === tag && ln.slice(-tag.length-1,-tag.length) === " ") {
-        const before = ln.slice(0, ln.length-tag.length-1).trim();
-        if (before.length > 0) { out.push(before); out.push(""); out.push(tag.toUpperCase()); found = true; break; }
-      }
+    const ln = lns[li];
+    const tr = ln.trim();
+    // Se la riga termina con una parola MPS attaccata, spezza
+    const mpsMatch = tr.match(/^(.+?)\s+(MATTINA|POMERIGGIO|SERA)$/);
+    if (mpsMatch && mpsMatch[1].length > 0) {
+      out.push(mpsMatch[1]); out.push(""); out.push(mpsMatch[2]);
+    } else {
+      out.push(ln);
     }
-    if (!found) { const tr = ln.trim(); if (tr==="Mattina"||tr==="Pomeriggio"||tr==="Sera") out.push(tr.toUpperCase()); else out.push(ln); }
   }
   t = out.join("\n");
   t = t.replace(/\.[ \t]+-[ \t]+/g, ".\n- ");
@@ -313,17 +325,17 @@ export default function PlannerPage() {
   // FIX Android: ref per la barra progress
   const progBarRef = useRef(null);
 
-  // FIX Android: scroll automatico barra step - porta sempre lo step attivo al centro
+  // FIX Android: scroll automatico barra step - setTimeout garantisce che il DOM sia aggiornato
   useEffect(() => {
-    if (!progBarRef.current) return;
-    const bar = progBarRef.current;
-    const active = bar.querySelector(`[data-step="${step}"]`);
-    if (active) {
-      const barRect = bar.getBoundingClientRect();
-      const elRect = active.getBoundingClientRect();
-      const targetScroll = bar.scrollLeft + (elRect.left - barRect.left) - (barRect.width / 2) + (elRect.width / 2);
+    const timer = setTimeout(() => {
+      if (!progBarRef.current) return;
+      const bar = progBarRef.current;
+      // Calcola la posizione target: step attivo = indice (step-1), ogni item è circa 54px wide
+      const itemWidth = 54; // larghezza approssimativa di sn + cn
+      const targetScroll = (step - 1) * itemWidth - (bar.clientWidth / 2) + (itemWidth / 2);
       bar.scrollTo({ left: Math.max(0, targetScroll), behavior: "smooth" });
-    }
+    }, 50);
+    return () => clearTimeout(timer);
   }, [step]);
 
   useEffect(() => {
@@ -427,7 +439,7 @@ export default function PlannerPage() {
       `- Usa [CITTA] SOLO se l'itinerario tocca più CITTÀ DIVERSE (es. Italia = Roma+Firenze+Venezia)\n` +
       `- Quartieri, arrondissement, zone, aree di una stessa città = SEMPRE [QUARTIERE]\n\n` +
       `FORMATO OBBLIGATORIO per ogni blocco:\n### NOME (N giorni) [TIPO]\n- **Cosa vedere**: luogo - perché\n- **Cosa fare**: attività - descrizione\n- **Da non perdere**: esperienza - perché\n\n` +
-      `REGOLE:\n1. Solo ### per i titoli\n2. Niente tabelle (pipe |)\n3. Inizia subito col primo ###\n4. La somma dei giorni deve corrispondere a: ${duration}\n5. Nomi reali, scrivi in italiano\n` +
+      `REGOLE:\n1. Solo ### per i titoli\n2. VIETATO usare tabelle (niente pipe |)\n3. Inizia subito col primo ###\n4. La somma dei giorni deve corrispondere a: ${duration}\n5. Nomi reali, scrivi in italiano\n6. Ogni bullet deve iniziare con **Cosa vedere**, **Cosa fare** o **Da non perdere** seguito dai due punti\n7. NON lasciare ** senza testo dopo\n` +
       logistica +
       `\n\nESEMPIO singola città (Parigi, 5gg):\n### LOUVRE & MARAIS (2 giorni) [QUARTIERE]\n- **Cosa vedere**: Museo del Louvre - capolavori imperdibili\n### MONTMARTRE & OPERA (1 giorno) [QUARTIERE]\n- **Cosa vedere**: Sacre-Coeur - vista panoramica\n### EIFFEL & SAINT-GERMAIN (2 giorni) [QUARTIERE]\n- **Cosa vedere**: Torre Eiffel - simbolo della città\n\n` +
       `ESEMPIO più città (Costa Azzurra, 7gg):\n### NIZZA (3 giorni) [CITTA]\n- **Cosa vedere**: Promenade des Anglais\n### MONACO (2 giorni) [CITTA]\n- **Cosa vedere**: Casinò di Monte Carlo\n### CANNES (2 giorni) [CITTA]\n- **Cosa vedere**: La Croisette`;
@@ -461,7 +473,7 @@ export default function PlannerPage() {
         const t = l.replace(/^#+\s*/,"");
         const typeMatch = t.match(/\[(QUARTIERE|CITTA|CITTÀ)\]/i);
         const type = typeMatch ? (typeMatch[1].toUpperCase().includes("QUART") ? "quartiere" : "citta") : null;
-        const nm = t.replace(/\[.*?\]/,"").replace(/\(.*\)/,"").trim();
+        const nm = t.replace(/\[.*?\]/,"").replace(/\(.*\)/,"").replace(/\*\*/g,"").replace(/[:–—].*/,"").trim().slice(0,50);
         const dg = t.match(/\((\d+)/);
         cur = { name: nm, days: dg ? parseInt(dg[1]) : null, type };
       }
@@ -481,32 +493,35 @@ export default function PlannerPage() {
     return out;
   }
 
-  // ── Fetch Hotels ───────────────────────────────────────────────────────────
+  // ── Fetch Hotels con retry ────────────────────────────────────────────────
   async function fetchHotelsForCity(cityName, bdg) {
     const hint = bdg === "luxury"
       ? "5 stelle lusso: Four Seasons, Rocco Forte, Belmond, Aman, Rosewood. Fascia 400+ eur/notte."
       : bdg === "economico"
       ? "2-3 stelle o B&B boutique con Booking 8+. Fascia 60-120 eur/notte."
       : "3-4 stelle: NH Hotels, Starhotels, Boscolo, Una Hotels, Marriott Courtyard. Fascia 120-250 eur/notte.";
-    const msg =
-      `Proponi ESATTAMENTE 3 hotel REALI esistenti a ${cityName}, fascia ${bdg} (${hint}).\n` +
-      `Periodo: ${period} ${tripYear||CY}. Viaggiatori: ${trav()}.\n` +
-      `OBBLIGATORIO: restituire SEMPRE 3 hotel diversi, nomi propri reali esistenti.\n` +
-      `Il migliore qualità/prezzo ha best:true (solo uno).\n` +
-      `Rispondi SOLO con JSON array con ESATTAMENTE 3 oggetti:\n` +
-      `[{"name":"Hotel Uno","stars":4,"zone":"quartiere","price":"euro150/notte","why":"perché sceglierlo","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},{"name":"Hotel Due","stars":3,"zone":"zona","price":"euro100/notte","why":"alternativa valida","pros":["p1","p2","p3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},{"name":"Hotel Tre","stars":4,"zone":"zona","price":"euro130/notte","why":"buona posizione","pros":["p1","p2","p3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
-    const txt = await callAI(msg, 1400, null);
-    if (!txt) return null;
-    try {
-      const m = txt.match(/\[[\s\S]*\]/);
-      if (m) {
-        const arr = JSON.parse(m[0]);
-        if (Array.isArray(arr) && arr.length > 0) {
-          if (!arr.some(h => h.best)) arr[0].best = true;
-          return arr;
+
+    for (let att = 1; att <= 2; att++) {
+      const msg =
+        `Sei un esperto di hotel. Elenca ESATTAMENTE 3 hotel reali di ${cityName}, fascia ${bdg} (${hint}).` +
+        (att > 1 ? " SECONDO TENTATIVO: restituisci obbligatoriamente 3 hotel." : "") +
+        `\nRispondi SOLO con JSON array, nessun testo prima o dopo:\n` +
+        `[{"name":"Nome Hotel 1","stars":4,"zone":"quartiere","price":"€150/notte","why":"perché sceglierlo","pros":["pro1","pro2","pro3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}" },` +
+        `{"name":"Nome Hotel 2","stars":3,"zone":"zona","price":"€90/notte","why":"buona alternativa","pros":["pro1","pro2","pro3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
+        `{"name":"Nome Hotel 3","stars":4,"zone":"zona","price":"€120/notte","why":"ottima posizione","pros":["pro1","pro2","pro3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
+      const txt = await callAI(msg, 1600, null);
+      if (!txt) continue;
+      try {
+        const m = txt.match(/\[[\s\S]*\]/);
+        if (m) {
+          const arr = JSON.parse(m[0]);
+          if (Array.isArray(arr) && arr.length >= 3) {
+            if (!arr.some(h => h.best)) arr[0].best = true;
+            return arr.slice(0, 3);
+          }
         }
-      }
-    } catch (e) {}
+      } catch (e) {}
+    }
     return null;
   }
 
@@ -579,7 +594,7 @@ export default function PlannerPage() {
       `Piano visite:\n${activeText}\n\n` +
       `FORMATO OBBLIGATORIO, ogni elemento su riga separata:\n\n` +
       `**Giorno 1 - Titolo del giorno**\n\nMATTINA\n- Attività 1 (tempo percorrenza)\n- Attività 2 (tempo percorrenza)\n\nPOMERIGGIO\n- Attività 1 (tempo percorrenza)\n- Attività 2 (tempo percorrenza)\n\nSERA\n- Attività 1\n\n---\n\n` +
-      `Ripeti per ogni giorno. REGOLE:\n1. MATTINA/POMERIGGIO/SERA su riga isolata, maiuscolo\n2. Vai a capo prima delle attività\n3. Ogni attività inizia con - su riga separata\n4. Niente testo descrittivo lungo attaccato alle sezioni\n5. Riga vuota tra sezioni\n` +
+      `Ripeti per ogni giorno. REGOLE ASSOLUTE:\n1. MATTINA, POMERIGGIO, SERA su riga COMPLETAMENTE ISOLATA (riga vuota sopra e sotto)\n2. MAI scrivere MATTINA/POMERIGGIO/SERA in fondo a una riga di testo\n3. Ogni attività: - su riga separata\n4. Ogni giorno separato da ---\n5. VIETATE tabelle markdown (niente pipe |)\n` +
       logistica + "\n\n" +
       `## LOGISTICA GENERALE\nOBBLIGATORIO: ogni punto su riga separata che inizia con -. NON scrivere testo continuo.\n- Trasporti: [come spostarsi]\n- Pagamenti: [carta o contanti]\n- App utili: [2-3 app]\n- Prenotazioni: [cosa prenotare]\n- Budget: [stima giornaliera]\n` +
       `NO orari precisi. Ottimizza spostamenti per posizione alloggio. Scrivi in italiano.`;
@@ -617,14 +632,14 @@ export default function PlannerPage() {
       if (tl.includes("auto")) return `## TRASPORTO\nViaggio in ${tr} da ${departure} a ${dest}. Percorso ottimizzato a goccia: prima le mete più lontane, poi quelle già sulla via del ritorno. Autostrade consigliate, soste e parcheggi in centro.\n`;
       if (tl.includes("treno")) return `## TRASPORTO\nViaggio in treno da ${departure} a ${dest}. Trenitalia o Italo: orari, prezzi, stazione di arrivo.\nLINK https://www.trenitalia.com\n`;
       if (tl.includes("bus")) return `## TRASPORTO\nViaggio in bus da ${departure} a ${dest}. Principali compagnie, fermate, orari.\n`;
-      return `## VOLO CONSIGLIATO\nRotta ${departure} - ${dest} ${period} ${y}: compagnie, prezzi, miglior opzione.\nLINK https://www.google.com/travel/flights?q=${encodeURIComponent(`${departure} ${dest}`)}\nLINK https://www.skyscanner.it/voli-per/${encodeURIComponent(dest.toLowerCase())}\n`;
+      return `## VOLO CONSIGLIATO\nDescrivi in prosa (VIETATE tabelle e pipe |) le 2-3 migliori opzioni di volo da ${departure} a ${dest} per ${period} ${y}: compagnia aerea, numero scali, durata e fascia prezzo indicativa. Poi indica la scelta consigliata e perché.\nLINK https://www.google.com/travel/flights?q=${encodeURIComponent(`${departure} ${dest}`)}\nLINK https://www.skyscanner.it/voli-per/${encodeURIComponent(dest.toLowerCase())}\n`;
     })();
     const msg =
       `Itinerario completo per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, ${trav()}, partenza ${departure}, alloggio ${selStr}.\n` +
       `Formato giorni: ${isMPS
         ? "Dividi ogni giorno in tre blocchi: MATTINA / POMERIGGIO / SERA (su righe separate maiuscolo). Elenca le attività come bullet - sotto ogni blocco."
         : `SCHEDULE ORE PER ORA: ogni attività deve avere un orario preciso. Esempio:\nGiorno 1 - Titolo\n07:00 - Partenza da ${departure}\n09:30 - Arrivo e check-in hotel\n10:00 - Visita al sito X (durata: 1.5 ore)\n12:00 - Pranzo al ristorante Y\n14:00 - Visita quartiere / museo\n17:00 - Aperitivo\n20:00 - Cena\nOgni riga deve avere ORARIO - ATTIVITÀ. Includi tempi di spostamento reali, mezzi, durate stimate.`
-      }. Separa giorni con ---. Scrivi in italiano con ## per sezioni:\n` +
+      }. Separa giorni con ---. VIETATO usare tabelle markdown (niente pipe |), scrivi sempre in prosa o bullet. Scrivi in italiano con ## per sezioni:\n` +
       `## PRESENTAZIONE DELLA DESTINAZIONE\n` +
       trasportoSection +
       `## ALLOGGIO\n${selStr}: zona e perché ottimale\nLINK https://www.booking.com/search.html?ss=${encodeURIComponent(dest)}\n` +
@@ -746,9 +761,9 @@ export default function PlannerPage() {
           <div className="ir">
             <input className="inp" placeholder="Es. Italia, Giappone, Kenya..."
               value={inp} onChange={e => setInp(e.target.value)}
-              onKeyDown={e => { if (e.key==="Enter" && inp.trim()) { const d=inp.trim(); setDest(d); setInp(""); setAiPerLoad(true); setStep(2); callAI(`In 3-4 righe in italiano, i periodi migliori per visitare ${d} nel ${CY} o ${CY+1} (clima, eventi, affluenza). Usa bullet -.`, 600, t => setAiPer(t)).then(() => setAiPerLoad(false)); }}}
+              onKeyDown={e => { if (e.key==="Enter" && inp.trim()) { const d=inp.trim(); setDest(d); setInp(""); setAiPerLoad(true); setStep(2); callAI(`Descrivi in 4-5 bullet i periodi migliori per visitare ${d}: per ogni periodo indica mesi, clima, pro e contro. NON citare anni specifici. Ogni bullet deve essere una frase completa e comprensibile. Usa bullet -.`, 700, t => setAiPer(t)).then(() => setAiPerLoad(false)); }}}
             />
-            <button className="go" onClick={() => { if (inp.trim()) { const d=inp.trim(); setDest(d); setInp(""); setAiPerLoad(true); setStep(2); callAI(`In 3-4 righe in italiano, i periodi migliori per visitare ${d} nel ${CY} o ${CY+1} (clima, eventi, affluenza). Usa bullet -.`, 600, t => setAiPer(t)).then(() => setAiPerLoad(false)); }}}>›</button>
+            <button className="go" onClick={() => { if (inp.trim()) { const d=inp.trim(); setDest(d); setInp(""); setAiPerLoad(true); setStep(2); callAI(`Descrivi in 4-5 bullet i periodi migliori per visitare ${d}: per ogni periodo indica mesi, clima, pro e contro. NON citare anni specifici. Ogni bullet deve essere una frase completa e comprensibile. Usa bullet -.`, 700, t => setAiPer(t)).then(() => setAiPerLoad(false)); }}}>›</button>
           </div>
         </div>
       )}

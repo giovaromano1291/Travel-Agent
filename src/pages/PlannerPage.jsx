@@ -65,25 +65,29 @@ function isIOS() {
 // ─── MARKDOWN → HTML ─────────────────────────────────────────────────────────
 function mdHtml(t) {
   t = t.replace(/\r/g, "");
-  t = t.replace(/^# .+$/gm, "");
+  // Rimuovi righe heading # e ###
+  t = t.replace(/^#{1,3}\s+/gm, "");
   // Rimuovi righe separatore tabella (|---|---|)
   t = t.replace(/^[|\s]*[-|\s]{3,}[|\s]*$/gm, "");
   // Converti righe tabella in testo semplice (rimuovi pipe)
   t = t.replace(/^\|(.+)\|\s*$/gm, (m, inner) => {
     return inner.split("|").map(c => c.trim()).filter(Boolean).join(" — ");
   });
-  // Rimuovi ** orfani (non chiusi sulla stessa riga)
+  // Rimuovi ** orfani: ** a inizio riga non chiusi
   t = t.replace(/^\*\*([^*\n]*)$/gm, "$1");
   t = t.replace(/^\*\*\s*/gm, "");
-  // Normalizza MATTINA/POMERIGGIO/SERA: assicura che siano su riga isolata
-  t = t.replace(/\b(MATTINA|POMERIGGIO|SERA)\b/g, "\n$1\n");
+  // Rimuovi [QUARTIERE] e [CITTA] residui visibili nel testo
+  t = t.replace(/\s*\[QUARTIERE\]/gi, "");
+  t = t.replace(/\s*\[CITT[AÀ]\]/gi, "");
+  // Normalizza MATTINA/POMERIGGIO/SERA: assicura righe isolate
+  t = t.replace(/([^\n])(MATTINA|POMERIGGIO|SERA)/g, "$1\n$2");
+  t = t.replace(/(MATTINA|POMERIGGIO|SERA)([^\n])/g, "$1\n$2");
   // Normalizza varianti minuscole
   t = t.replace(/^(Mattina|Pomeriggio|Sera)$/gm, m => m.toUpperCase());
   const lns = t.split("\n"); const out = [];
   for (let li = 0; li < lns.length; li++) {
     const ln = lns[li];
     const tr = ln.trim();
-    // Se la riga termina con una parola MPS attaccata, spezza
     const mpsMatch = tr.match(/^(.+?)\s+(MATTINA|POMERIGGIO|SERA)$/);
     if (mpsMatch && mpsMatch[1].length > 0) {
       out.push(mpsMatch[1]); out.push(""); out.push(mpsMatch[2]);
@@ -94,6 +98,16 @@ function mdHtml(t) {
   t = out.join("\n");
   t = t.replace(/\.[ \t]+-[ \t]+/g, ".\n- ");
   t = t.replace(/([.!?])\s+(Trasporti|Pagamenti|App utili|Prenotazioni|Budget|App|Visto|Valigia):/g, "$1\n- $2:");
+  // Raggruppa voci logistica con stessa label in sotto-elenco
+  const logLabels = ["Trasporti","Pagamenti","App utili","Prenotazioni","Budget","Visto","Valigia"];
+  for (const lbl of logLabels) {
+    const re = new RegExp(`(- ${lbl}:[^\n]+)\n- ${lbl}:([^\n]+)`, "g");
+    t = t.replace(re, (m, first, second) => {
+      // Prima occorrenza: rimuovi il testo dopo : e aggiungi sotto-elenco
+      const firstText = first.replace(`- ${lbl}:`, "").trim();
+      return `- ${lbl}:\n  • ${firstText}\n  • ${second.trim()}`;
+    });
+  }
   t = t.replace(/\n{3,}/g, "\n\n");
   return t
     .replace(/\*\*(.*?)\*\*/g, `<strong style='color:${GL};font-weight:500'>$1</strong>`)
@@ -325,16 +339,16 @@ export default function PlannerPage() {
   // FIX Android: ref per la barra progress
   const progBarRef = useRef(null);
 
-  // FIX Android: scroll automatico barra step - setTimeout garantisce che il DOM sia aggiornato
+  // FIX Android: scrollIntoView porta sempre lo step attivo in vista
   useEffect(() => {
     const timer = setTimeout(() => {
       if (!progBarRef.current) return;
-      const bar = progBarRef.current;
-      // Calcola la posizione target: step attivo = indice (step-1), ogni item è circa 54px wide
-      const itemWidth = 54; // larghezza approssimativa di sn + cn
-      const targetScroll = (step - 1) * itemWidth - (bar.clientWidth / 2) + (itemWidth / 2);
-      bar.scrollTo({ left: Math.max(0, targetScroll), behavior: "smooth" });
-    }, 50);
+      // Cerca il cerchio attivo per data-step
+      const active = progBarRef.current.querySelector(`[data-step="${step}"]`);
+      if (active) {
+        active.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+      }
+    }, 100);
     return () => clearTimeout(timer);
   }, [step]);
 
@@ -473,7 +487,14 @@ export default function PlannerPage() {
         const t = l.replace(/^#+\s*/,"");
         const typeMatch = t.match(/\[(QUARTIERE|CITTA|CITTÀ)\]/i);
         const type = typeMatch ? (typeMatch[1].toUpperCase().includes("QUART") ? "quartiere" : "citta") : null;
-        const nm = t.replace(/\[.*?\]/,"").replace(/\(.*\)/,"").replace(/\*\*/g,"").replace(/[:–—].*/,"").trim().slice(0,50);
+        const nm = t
+        .replace(/\[.*?\]/g, "")      // rimuovi [QUARTIERE] [CITTA]
+        .replace(/\(.*?\)/g, "")      // rimuovi (N giorni)
+        .replace(/\*\*/g, "")         // rimuovi **
+        .replace(/[:–—\|].*/g, "")    // tronca a primo : o — o |
+        .replace(/\s+/g, " ")          // normalizza spazi
+        .trim()
+        .slice(0, 40);                  // max 40 caratteri
         const dg = t.match(/\((\d+)/);
         cur = { name: nm, days: dg ? parseInt(dg[1]) : null, type };
       }
@@ -593,37 +614,7 @@ export default function PlannerPage() {
       `Itinerario bozza per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, alloggio ${hotel}, ${trav()}.\n` +
       `Piano visite:\n${activeText}\n\n` +
       `FORMATO OBBLIGATORIO, ogni elemento su riga separata:\n\n` +
-      `**Giorno 1 - Titolo del giorno**\n\nMATTINA\n- Attività 1 (tempo percorrenza)\n- Attività 2 (tempo percorrenza)\n\nPOMERIGGIO\n- Attività 1 (tempo percorrenza)\n- Attività 2 (tempo percorrenza)\n\nSERA\n- Attività 1\n\n---\n\n` +
-      `Ripeti per ogni giorno. REGOLE ASSOLUTE:\n1. MATTINA, POMERIGGIO, SERA su riga COMPLETAMENTE ISOLATA (riga vuota sopra e sotto)\n2. MAI scrivere MATTINA/POMERIGGIO/SERA in fondo a una riga di testo\n3. Ogni attività: - su riga separata\n4. Ogni giorno separato da ---\n5. VIETATE tabelle markdown (niente pipe |)\n` +
-      logistica + "\n\n" +
-      `## LOGISTICA GENERALE\nOBBLIGATORIO: ogni punto su riga separata che inizia con -. NON scrivere testo continuo.\n- Trasporti: [come spostarsi]\n- Pagamenti: [carta o contanti]\n- App utili: [2-3 app]\n- Prenotazioni: [cosa prenotare]\n- Budget: [stima giornaliera]\n` +
-      `NO orari precisi. Ottimizza spostamenti per posizione alloggio. Scrivi in italiano.`;
-    await callAI(msg, 8000, t => setDraftText(t));
-    setDraftLoad(false);
-  }
-
-  // ── Gen Food ───────────────────────────────────────────────────────────────
-  async function genFood() {
-    setStep(13); setFoodLoad(true); setFoodText("");
-    const y = tripYear || detectYear(period);
-    const msg =
-      `Suggerisci ristoranti per ogni giorno del viaggio a ${dest} (${period} ${y}), budget ${budget}, ${trav()}, alloggio ${selStr}.\n` +
-      `## PREZZI MEDI A ${dest.toUpperCase()}\n(costo medio a persona per tipologia)\n` +
-      `## DOVE MANGIARE - GIORNO PER GIORNO\nPer ogni giorno: pranzo e cena con nome locale, tipo, zona, prezzo, specialità. LINK url\n` +
-      `## ESPERIENZE CULINARIE DA NON PERDERE\n3-4 esperienze con LINK url. Scrivi in italiano.`;
-    await callAI(msg, 3000, t => setFoodText(t));
-    setFoodLoad(false);
-  }
-
-  // ── Gen Final ──────────────────────────────────────────────────────────────
-  async function genFinal(f) {
-    setStep(15); setFinLoad(true); setFinText("");
-    setDImg(imgUrl(dest, 780, 260));
-    setGal([imgUrl(`${dest} landscape`), imgUrl(`${dest} food`), imgUrl(`${dest} hotel`)]);
-    const y = tripYear || detectYear(period);
-    const isMPS = f !== "orario";
-    const gdStr = guide && guide !== false
-      ? `\n## GUIDE TURISTICHE\nGiorni: ${guide.days} - Lingua: ${guide.language}\n2-3 servizi con LINK url\n`
+      `**Giorno 1 - Titolo**\n\nMATTINA\n- Attività 1 (durata)\n- Attività 2 (durata)\n\nPOMERIGGIO\n- Attività 1 (durata)\n- Attività 2 (durata)\n\nSERA\n- Attività 1\n- Attività 2\n\n---\n\nIMPORTANTE: ogni giorno DEVE avere MATTINA, POMERIGGIO e SERA con almeno 2 attività ciascuna.`
       : "";
     const logistica = logisticaPrompt(departure, dest, transport);
     const trasportoSection = (() => {
@@ -632,7 +623,7 @@ export default function PlannerPage() {
       if (tl.includes("auto")) return `## TRASPORTO\nViaggio in ${tr} da ${departure} a ${dest}. Percorso ottimizzato a goccia: prima le mete più lontane, poi quelle già sulla via del ritorno. Autostrade consigliate, soste e parcheggi in centro.\n`;
       if (tl.includes("treno")) return `## TRASPORTO\nViaggio in treno da ${departure} a ${dest}. Trenitalia o Italo: orari, prezzi, stazione di arrivo.\nLINK https://www.trenitalia.com\n`;
       if (tl.includes("bus")) return `## TRASPORTO\nViaggio in bus da ${departure} a ${dest}. Principali compagnie, fermate, orari.\n`;
-      return `## VOLO CONSIGLIATO\nDescrivi in prosa (VIETATE tabelle e pipe |) le 2-3 migliori opzioni di volo da ${departure} a ${dest} per ${period} ${y}: compagnia aerea, numero scali, durata e fascia prezzo indicativa. Poi indica la scelta consigliata e perché.\nLINK https://www.google.com/travel/flights?q=${encodeURIComponent(`${departure} ${dest}`)}\nLINK https://www.skyscanner.it/voli-per/${encodeURIComponent(dest.toLowerCase())}\n`;
+      return `## VOLO CONSIGLIATO\nElenca le migliori opzioni di volo da ${departure} a ${dest} per ${period} ${y} in questo formato bullet (VIETATE tabelle e pipe |):\n- **Compagnia 1**: numero scali, durata totale, fascia prezzo a/r a persona\n- **Compagnia 2**: numero scali, durata totale, fascia prezzo a/r a persona\n- **Compagnia 3**: numero scali, durata totale, fascia prezzo a/r a persona\n- **Consiglio**: indica quale opzione è la migliore e perché in 1-2 righe\nLINK https://www.google.com/travel/flights?q=${encodeURIComponent(`${departure} ${dest}`)}\nLINK https://www.skyscanner.it/voli-per/${encodeURIComponent(dest.toLowerCase())}\n`;
     })();
     const msg =
       `Itinerario completo per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, ${trav()}, partenza ${departure}, alloggio ${selStr}.\n` +
@@ -640,7 +631,7 @@ export default function PlannerPage() {
         ? "Dividi ogni giorno in tre blocchi: MATTINA / POMERIGGIO / SERA (su righe separate maiuscolo). Elenca le attività come bullet - sotto ogni blocco."
         : `SCHEDULE ORE PER ORA: ogni attività deve avere un orario preciso. Esempio:\nGiorno 1 - Titolo\n07:00 - Partenza da ${departure}\n09:30 - Arrivo e check-in hotel\n10:00 - Visita al sito X (durata: 1.5 ore)\n12:00 - Pranzo al ristorante Y\n14:00 - Visita quartiere / museo\n17:00 - Aperitivo\n20:00 - Cena\nOgni riga deve avere ORARIO - ATTIVITÀ. Includi tempi di spostamento reali, mezzi, durate stimate.`
       }. Separa giorni con ---. VIETATO usare tabelle markdown (niente pipe |), scrivi sempre in prosa o bullet. Scrivi in italiano con ## per sezioni:\n` +
-      `## PRESENTAZIONE DELLA DESTINAZIONE\n` +
+      `## PRESENTAZIONE DELLA DESTINAZIONE\nScrivi solo la descrizione della destinazione (2-3 frasi). NON includere voli o trasporti in questa sezione.\n` +
       trasportoSection +
       `## ALLOGGIO\n${selStr}: zona e perché ottimale\nLINK https://www.booking.com/search.html?ss=${encodeURIComponent(dest)}\n` +
       `## ITINERARIO GIORNO PER GIORNO\n` +

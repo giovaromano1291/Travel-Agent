@@ -60,19 +60,19 @@ function parseDurationToNights(d) {
 
 function mdHtml(t) {
   t = t.replace(/\r/g, '');
-  // Rimuovi heading # e ### visibili nel testo
+  // Rimuovi heading # e ### rimasti nel testo
   t = t.replace(/^#{1,3}\s+/gm, '');
-  // Rimuovi [QUARTIERE] e [CITTA] residui
+  // Rimuovi [QUARTIERE] e [CITTA] rimasti visibili
   t = t.replace(/\s*\[QUARTIERE\]/gi, '');
-  t = t.replace(/\s*\[CITT[AÀ]\]/gi, '');
+  t = t.replace(/\s*\[CITT[A\u00c0]\]/gi, '');
   // Rimuovi ** orfani (non chiusi sulla stessa riga)
   t = t.replace(/^\*\*([^*\n]*)$/gm, '$1');
   t = t.replace(/^\*\*\s*/gm, '');
-  // Rimuovi righe separatore tabella
+  // Rimuovi righe separatore tabella |---|
   t = t.replace(/^[|\s]*[-|\s]{3,}[|\s]*$/gm, '');
-  // Converti righe tabella in testo (rimuovi pipe)
+  // Converti righe tabella in testo semplice
   t = t.replace(/^\|(.+)\|\s*$/gm, (_, inner) =>
-    inner.split('|').map(c => c.trim()).filter(Boolean).join(' — ')
+    inner.split('|').map(s => s.trim()).filter(Boolean).join(' — ')
   );
   const MPS = ['Mattina','MATTINA','Pomeriggio','POMERIGGIO','Sera','SERA'];
   const lns = t.split('\n');
@@ -113,19 +113,35 @@ function mdHtml(t) {
     });
 }
 
+// Rileva dispositivo mobile (Android o iOS)
+function isMobile() {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
 async function callAI(userMsg, maxTok = 1000, onChunk) {
+  const mobile = isMobile();
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: maxTok,
-        stream: true,
-        messages: [{ role: 'user', content: userMsg }],
+        message: userMsg,
+        maxTokens: maxTok,
+        stream: !mobile,
       }),
     });
     if (!res.ok) return '';
+
+    // Mobile: risposta JSON diretta (no streaming)
+    if (mobile) {
+      const data = await res.json();
+      const text = data?.content?.[0]?.text || '';
+      if (onChunk && text) onChunk(text);
+      return text;
+    }
+
+    // Desktop: streaming SSE
     const reader = res.body.getReader();
     const dc = new TextDecoder();
     let full = '';
@@ -221,7 +237,7 @@ const CSS = `
 .p-dl{width:100%;max-width:800px;height:.5px;background:#2a2a2a;margin-bottom:1.5rem}
 .p-back{display:flex;align-items:center;gap:6px;background:transparent;border:none;color:#777;font-size:12px;cursor:pointer;margin-bottom:.8rem;padding:4px 0;font-family:'Inter',sans-serif;transition:color .2s;width:100%;max-width:720px}
 .p-back:hover{color:#C9A84C}
-.p-prog{display:flex;align-items:center;justify-content:center;margin-bottom:2rem;width:100%;max-width:920px;overflow-x:auto;padding:.5rem 0 .8rem;scrollbar-width:none}
+.p-prog{display:flex;align-items:center;justify-content:flex-start;margin-bottom:2rem;width:100%;max-width:920px;overflow-x:auto;padding:.5rem 0 .8rem;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .p-prog::-webkit-scrollbar{display:none}
 .p-sn{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
 .p-sc{width:28px;height:28px;border-radius:50%;border:1.5px solid #2a2a2a;display:flex;align-items:center;justify-content:center;font-size:10px;color:#888;transition:all .3s;flex-shrink:0}
@@ -296,7 +312,7 @@ const CSS = `
 .p-ync:hover{border-color:#C9A84C;background:#1a1400}
 .p-dpick{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .p-save-bar{background:#1a1400;border:.5px solid #C9A84C;border-radius:10px;padding:10px 16px;font-size:12px;color:#e8c97a;margin-top:1rem;display:flex;align-items:center;gap:8px}
-@media(max-width:600px){.guide-grid{grid-template-columns:1fr!important}.p-bc{grid-template-columns:1fr 1fr}.p-inp,.p-ta{font-size:16px}}
+@media(max-width:600px){.guide-grid{grid-template-columns:1fr!important}.p-bc{grid-template-columns:1fr 1fr}.p-inp,.p-ta{font-size:16px;-webkit-text-size-adjust:100%}}
 `;
 
 /* ─── Sub-components ────────────────────────────────────────────────────── */
@@ -464,14 +480,13 @@ export default function PlannerPage() {
     if (!draftLoad && draftLoadRef.current) { draftLoadRef.current = false; if (draftRef.current) draftRef.current.scrollTop = 0; }
   }, [draftLoad]);
 
-  // FIX: porta lo step attivo sempre in vista nella barra
   useEffect(() => {
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       if (!progBarRef.current) return;
-      const el = progBarRef.current.querySelector('[data-active="true"]');
-      if (el) el.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' });
-    }, 80);
-    return () => clearTimeout(t);
+      const active = progBarRef.current.querySelector('.p-sc.act');
+      if (active) active.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' });
+    }, 100);
+    return () => clearTimeout(timer);
   }, [step]);
 
   /* ── helpers ── */
@@ -547,7 +562,7 @@ export default function PlannerPage() {
     if (!inp.trim()) return;
     const d = inp.trim(); setDest(d); setInp(''); setAiPerLoad(true); setStep(2);
     await callAI(
-      `Descrivi in 4-5 bullet i periodi migliori per visitare ${d}: per ogni periodo indica mesi, clima, pro e contro. NON citare anni specifici, solo mesi e stagioni. Ogni bullet deve essere una frase completa. Usa bullet -.`,
+      `Descrivi in 4-5 bullet i periodi migliori per visitare ${d}: mesi ideali, clima, pro e contro. NON citare anni specifici. Ogni bullet deve essere una frase completa con senso compiuto. Usa bullet -.`,
       600, t => setAiPer(t)
     );
     setAiPerLoad(false);
@@ -635,10 +650,9 @@ export default function PlannerPage() {
     for (let att = 1; att <= 2; att++) {
       const msg =
         `Elenca ESATTAMENTE 3 hotel reali di ${cityName}, fascia ${bdg} (${hint}).` +
-        (att > 1 ? ' SECONDO TENTATIVO: devi restituire 3 hotel.' : '') +
-        `\nRegole: nomi reali, best:true solo per il migliore qualita/prezzo.` +
+        (att > 1 ? ' SECONDO TENTATIVO: devi restituire obbligatoriamente 3 hotel.' : '') +
         `\nRispondi SOLO con JSON array (nessun testo prima o dopo):\n` +
-        `[{"name":"Hotel A","stars":4,"zone":"centro","price":"euro150/notte","why":"ottima posizione","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}" },` +
+        `[{"name":"Hotel A","stars":4,"zone":"centro","price":"euro150/notte","why":"ottima posizione","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
         `{"name":"Hotel B","stars":3,"zone":"zona","price":"euro90/notte","why":"ottimo prezzo","pros":["p1","p2","p3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
         `{"name":"Hotel C","stars":4,"zone":"zona","price":"euro120/notte","why":"buon comfort","pros":["p1","p2","p3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
       const txt = await callAI(msg, 1600, null);
@@ -651,7 +665,6 @@ export default function PlannerPage() {
             if (!arr.some(h => h.best)) arr[0].best = true;
             return arr.slice(0, 3);
           }
-          // Meno di 3: se secondo tentativo usa quello che c'è
           if (att === 2 && Array.isArray(arr) && arr.length > 0) {
             if (!arr.some(h => h.best)) arr[0].best = true;
             return arr;
@@ -745,9 +758,9 @@ export default function PlannerPage() {
     const msg =
       `Itinerario bozza per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, alloggio ${hotel}, ${trav()}.\n` +
       `Piano visite:\n${activeText}\n\n` +
-      `FORMATO OBBLIGATORIO per ogni giorno:\n\n**Giorno 1 - Titolo del giorno**\n\nMATTINA\n- Attivita 1 (durata)\n- Attivita 2 (durata)\n\nPOMERIGGIO\n- Attivita 1 (durata)\n- Attivita 2 (durata)\n\nSERA\n- Attivita 1\n- Attivita 2\n\n---\n\n` +
-      `REGOLE ASSOLUTE:\n1. MATTINA, POMERIGGIO, SERA su riga COMPLETAMENTE ISOLATA (riga vuota prima e dopo)\n2. Ogni giorno DEVE avere tutte e tre le sezioni con almeno 2 attivita ciascuna\n3. Ogni attivita inizia con - su riga separata\n4. Ogni giorno separato da ---\n5. VIETATE tabelle markdown\n\n` +
-      `## LOGISTICA GENERALE\nUNA voce per categoria, riga separata:\n- Trasporti: [come spostarsi in modo completo]\n- Pagamenti: [carta o contanti e dettagli]\n- App utili: [2-3 app specifiche per la destinazione]\n- Prenotazioni: [cosa prenotare e con quanto anticipo]\n- Budget: [stima giornaliera completa a persona]\n` +
+      `FORMATO OBBLIGATORIO per ogni giorno:\n\n**Giorno 1 - Titolo**\n\nMATTINA\n- Attivita 1 (durata)\n- Attivita 2 (durata)\n\nPOMERIGGIO\n- Attivita 1 (durata)\n- Attivita 2 (durata)\n\nSERA\n- Attivita 1\n- Attivita 2\n\n---\n\n` +
+      `REGOLE ASSOLUTE:\n1. Ogni giorno DEVE avere MATTINA, POMERIGGIO e SERA con almeno 2 attivita ciascuna\n2. MATTINA/POMERIGGIO/SERA su riga completamente isolata\n3. Ogni attivita su riga separata con -\n4. Ogni giorno separato da ---\n5. VIETATE tabelle markdown\n\n` +
+      `## LOGISTICA GENERALE\nUNA voce per categoria, una riga ciascuna:\n- Trasporti: [come spostarsi, mezzi consigliati]\n- Pagamenti: [carta o contanti, dettagli locali]\n- App utili: [2-3 app specifiche]\n- Prenotazioni: [cosa prenotare e quando]\n- Budget: [stima giornaliera a persona]\n` +
       `Scrivi in italiano.`;
     await callAI(msg, 10000, t => setDraftText(t));
     setDraftLoad(false);
@@ -779,7 +792,7 @@ export default function PlannerPage() {
       if (tr.includes('auto'))  return `## TRASPORTO\nViaggio in ${transport} da ${departure} a ${dest}. Percorso, autostrade, soste e parcheggi.\n`;
       if (tr.includes('treno')) return `## TRASPORTO\nViaggio in treno da ${departure} a ${dest}. Trenitalia o Italo: orari, prezzi, stazione.\nLINK https://www.trenitalia.com\n`;
       if (tr.includes('bus'))   return `## TRASPORTO\nViaggio in bus da ${departure} a ${dest}. Compagnie, fermate, orari.\n`;
-      return `## VOLO CONSIGLIATO\nElenca le migliori opzioni di volo da ${departure} a ${dest} per ${period} ${y} in questo formato (VIETATE tabelle e pipe |):\n- **Compagnia consigliata**: numero scali, durata totale, fascia prezzo a/r a persona, motivo della scelta\n- **Alternativa economica**: numero scali, durata, fascia prezzo\n- **Alternativa premium**: numero scali, durata, fascia prezzo\nLINK https://www.google.com/travel/flights?q=${encodeURIComponent(`${departure} ${dest}`)}\nLINK https://www.skyscanner.it/voli-per/${encodeURIComponent(dest.toLowerCase())}\n`;
+      return `## VOLO CONSIGLIATO\nElenca le migliori opzioni da ${departure} a ${dest} per ${period} ${y} in formato bullet (VIETATE tabelle):\n- **Opzione consigliata**: compagnia, scali, durata, fascia prezzo a/r a persona, motivo\n- **Alternativa economica**: compagnia, scali, durata, fascia prezzo\n- **Alternativa diretta**: compagnia, durata, fascia prezzo (se disponibile)\nLINK https://www.google.com/travel/flights?q=${encodeURIComponent(`${departure} ${dest}`)}\nLINK https://www.skyscanner.it/voli-per/${encodeURIComponent(dest.toLowerCase())}\n`;
     })();
     const formatStr = isMPS
       ? 'Dividi ogni giorno in tre blocchi: MATTINA / POMERIGGIO / SERA (righe separate maiuscolo). Elenca attivita come bullet - sotto ogni blocco.'
@@ -787,7 +800,7 @@ export default function PlannerPage() {
     const msg =
       `Itinerario completo per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, ${trav()}, partenza ${departure}, alloggio ${selStr}.\n` +
       `Formato giorni: ${formatStr}. Separa giorni con ---. Scrivi in italiano con ## per sezioni:\n` +
-      `## PRESENTAZIONE DELLA DESTINAZIONE\nDescrivi la destinazione in 2-3 frasi evocative. NON includere voli, trasporti o logistica in questa sezione.\n` +
+      `## PRESENTAZIONE DELLA DESTINAZIONE\nDescrivi la destinazione in 2-3 frasi evocative. NON includere voli o trasporti qui.\n` +
       transportBlock +
       `## ALLOGGIO\n${selStr}: zona e perche ottimale\nLINK https://www.booking.com/search.html?ss=${encodeURIComponent(dest)}\n` +
       `## ITINERARIO GIORNO PER GIORNO\nSEGUI ESATTAMENTE questa bozza approvata aggiungendo solo dettagli e link:\n${draftText.slice(0, 2500)}\n\nPer ogni attivita aggiungi: LINK url-biglietti${wantsFood ? ' e LINK url-ristorante' : ''}\n` +
@@ -839,7 +852,7 @@ export default function PlannerPage() {
     const snum = si + 1;
     const nodes = [
       <div className="p-sn" key={snum}>
-        <div className={`p-sc${step === snum ? ' act' : step > snum ? ' dn' : ''}`} data-active={step === snum ? 'true' : undefined}>{step > snum ? '✓' : snum}</div>
+        <div className={`p-sc${step === snum ? ' act' : step > snum ? ' dn' : ''}`}>{step > snum ? '✓' : snum}</div>
         <div className={`p-sl${step === snum ? ' act' : ''}`}>{label}</div>
       </div>
     ];

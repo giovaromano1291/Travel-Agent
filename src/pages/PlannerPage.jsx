@@ -313,17 +313,16 @@ export default function PlannerPage() {
   // FIX Android: ref per la barra progress
   const progBarRef = useRef(null);
 
-  // FIX Android: scroll automatico della barra step per portare il cerchio attivo in vista
+  // FIX Android: scroll automatico barra step - porta sempre lo step attivo al centro
   useEffect(() => {
     if (!progBarRef.current) return;
     const bar = progBarRef.current;
-    // Trova il cerchio attivo
-    const active = bar.querySelector(".sc.act");
+    const active = bar.querySelector(`[data-step="${step}"]`);
     if (active) {
       const barRect = bar.getBoundingClientRect();
       const elRect = active.getBoundingClientRect();
-      const scrollLeft = bar.scrollLeft + (elRect.left - barRect.left) - (barRect.width / 2) + (elRect.width / 2);
-      bar.scrollTo({ left: scrollLeft, behavior: "smooth" });
+      const targetScroll = bar.scrollLeft + (elRect.left - barRect.left) - (barRect.width / 2) + (elRect.width / 2);
+      bar.scrollTo({ left: Math.max(0, targetScroll), behavior: "smooth" });
     }
   }, [step]);
 
@@ -365,6 +364,22 @@ export default function PlannerPage() {
       "sydney":[-33.9,151.2],"nairobi":[-1.3,36.8],"kenya":[-0.0,37.9],"miami":[25.8,-80.2],
       "toronto":[43.7,-79.4],"umbria":[42.9,12.7],"toscana":[43.4,11.2],"sicilia":[37.6,14.0],
       "sardegna":[40.1,9.0],"calabria":[38.9,16.5],"puglia":[40.8,17.2],"campania":[40.8,14.8],
+      "giappone":[36.2,138.3],"japan":[36.2,138.3],"cina":[35.9,104.2],"china":[35.9,104.2],
+      "india":[20.6,79.1],"australia":[-25.3,133.8],"brasile":[-14.2,-51.9],"brazil":[-14.2,-51.9],
+      "argentina":[-38.4,-63.6],"sudafrica":[-30.6,22.9],"sudafrica":[-30.6,22.9],
+      "messico":[23.6,-102.5],"mexico":[23.6,-102.5],"usa":[37.1,-95.7],"canada":[56.1,-106.3],
+      "tailandia":[15.9,101.0],"indonesia":[-0.8,113.9],"vietnam":[14.1,108.3],
+      "corea":[36.0,127.8],"maldive":[3.2,73.2],"mauritius":[-20.3,57.6],
+      "tanzania":[-6.4,34.9],"marocco":[31.8,-7.1],"egitto":[26.8,30.8],
+      "peru":[-9.2,-75.0],"chile":[-35.7,-71.5],"colombia":[4.6,-74.1],
+      "nuovazelanda":[-40.9,174.9],"newzealand":[-40.9,174.9],
+      "islanda":[65.0,-18.5],"iceland":[65.0,-18.5],"norvegia":[60.5,8.5],
+      "svezia":[60.1,18.6],"finlandia":[61.9,25.7],"danimarca":[56.3,9.5],
+      "polonia":[51.9,19.1],"romania":[45.9,24.9],"ucraina":[49.0,31.4],
+      "croazia":[45.1,15.2],"grecia":[39.1,22.0],"turchia":[38.9,35.2],
+      "portogallo":[39.4,-8.2],"spagna":[40.5,-3.7],"francia":[46.2,2.2],
+      "germania":[51.2,10.5],"austria":[47.5,14.6],"svizzera":[46.8,8.2],
+      "belgio":[50.5,4.5],"olanda":[52.1,5.3],"ungheria":[47.2,19.5],
     };
     function norm(s) { return (s||"").toLowerCase().trim().replace(/\s+/g,"").replace(/[^a-zàèéìòù]/g,""); }
     function getC(place) {
@@ -380,7 +395,7 @@ export default function PlannerPage() {
     }
     const c1 = getC(departure), c2 = getC(dest);
     if (c1 && c2) { setDistClose(hav(c1,c2) < 1200); }
-    else { setDistClose(true); }
+    else { setDistClose(false); } // Default: aereo se non troviamo coordinate
   }
 
   // ── Conferma date ──────────────────────────────────────────────────────────
@@ -474,12 +489,13 @@ export default function PlannerPage() {
       ? "2-3 stelle o B&B boutique con Booking 8+. Fascia 60-120 eur/notte."
       : "3-4 stelle: NH Hotels, Starhotels, Boscolo, Una Hotels, Marriott Courtyard. Fascia 120-250 eur/notte.";
     const msg =
-      `Proponi 3 hotel REALI esistenti a ${cityName}, fascia ${bdg} (${hint}).\n` +
+      `Proponi ESATTAMENTE 3 hotel REALI esistenti a ${cityName}, fascia ${bdg} (${hint}).\n` +
       `Periodo: ${period} ${tripYear||CY}. Viaggiatori: ${trav()}.\n` +
-      `SOLO fascia ${bdg}. Nomi propri reali. Il migliore qualità/prezzo ha best:true.\n` +
-      `Rispondi SOLO con JSON array:\n` +
-      `[{"name":"Nome Hotel Reale","stars":4,"zone":"quartiere","price":"euro150/notte","why":"perché sceglierlo per ${cityName}","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
-    const txt = await callAI(msg, 900, null);
+      `OBBLIGATORIO: restituire SEMPRE 3 hotel diversi, nomi propri reali esistenti.\n` +
+      `Il migliore qualità/prezzo ha best:true (solo uno).\n` +
+      `Rispondi SOLO con JSON array con ESATTAMENTE 3 oggetti:\n` +
+      `[{"name":"Hotel Uno","stars":4,"zone":"quartiere","price":"euro150/notte","why":"perché sceglierlo","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},{"name":"Hotel Due","stars":3,"zone":"zona","price":"euro100/notte","why":"alternativa valida","pros":["p1","p2","p3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},{"name":"Hotel Tre","stars":4,"zone":"zona","price":"euro130/notte","why":"buona posizione","pros":["p1","p2","p3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
+    const txt = await callAI(msg, 1400, null);
     if (!txt) return null;
     try {
       const m = txt.match(/\[[\s\S]*\]/);
@@ -689,7 +705,7 @@ export default function PlannerPage() {
   const progressBar = STEPS.map((label, si) => {
     const snum = si + 1;
     return [
-      <div className="sn" key={snum}>
+      <div className="sn" key={snum} data-step={snum}>
         <div className={`sc${step===snum?" act":step>snum?" dn":""}`}>{step>snum?"✓":snum}</div>
         <div className={`sl${step===snum?" act":""}`}>{label}</div>
       </div>,
@@ -1057,7 +1073,7 @@ export default function PlannerPage() {
           <Badge text={`🧭 Guide · ${dest}`}/>
           <div className="tt">Vuoi una guida turistica?</div>
           <div className="ht">Guide locali certificate lungo il percorso</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
+          <div className="guide-layout">
             <div>
               {guide === null && (
                 <div className="yn">
@@ -1082,7 +1098,7 @@ export default function PlannerPage() {
                 </div>
               )}
             </div>
-            <div style={{background:"#111",border:".5px solid #2a2a2a",borderRadius:12,padding:"14px 16px",maxHeight:360,overflowY:"auto"}}>
+            <div style={{background:"#111",border:".5px solid #2a2a2a",borderRadius:12,padding:"14px 16px",maxHeight:300,overflowY:"auto"}}>
               <div style={{fontSize:11,letterSpacing:"2px",color:G,textTransform:"uppercase",fontWeight:600,marginBottom:"0.8rem"}}>Riepilogo itinerario</div>
               {draftClusters.length === 0
                 ? <div style={{fontSize:12,color:"#666"}}>{draftLoad ? "Sto generando la bozza..." : "La bozza dell'itinerario non è ancora disponibile."}</div>

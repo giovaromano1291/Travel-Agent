@@ -60,20 +60,7 @@ function parseDurationToNights(d) {
 
 function mdHtml(t) {
   t = t.replace(/\r/g, '');
-  // Rimuovi heading # e ### rimasti nel testo
-  t = t.replace(/^#{1,3}\s+/gm, '');
-  // Rimuovi [QUARTIERE] e [CITTA] rimasti visibili
-  t = t.replace(/\s*\[QUARTIERE\]/gi, '');
-  t = t.replace(/\s*\[CITT[A\u00c0]\]/gi, '');
-  // Rimuovi ** orfani (non chiusi sulla stessa riga)
-  t = t.replace(/^\*\*([^*\n]*)$/gm, '$1');
-  t = t.replace(/^\*\*\s*/gm, '');
-  // Rimuovi righe separatore tabella |---|
-  t = t.replace(/^[|\s]*[-|\s]{3,}[|\s]*$/gm, '');
-  // Converti righe tabella in testo semplice
-  t = t.replace(/^\|(.+)\|\s*$/gm, (_, inner) =>
-    inner.split('|').map(s => s.trim()).filter(Boolean).join(' — ')
-  );
+  t = t.replace(/^# .+$/gm, '');
   const MPS = ['Mattina','MATTINA','Pomeriggio','POMERIGGIO','Sera','SERA'];
   const lns = t.split('\n');
   const out = [];
@@ -99,7 +86,12 @@ function mdHtml(t) {
     .replace(/\*\*(.*?)\*\*/g, `<strong style='color:${GL};font-weight:500'>$1</strong>`)
     .replace(/\*([^*\n]+?)\*/g, `<em style='color:#bbb;font-style:italic'>$1</em>`)
     .replace(/^([A-Z][A-ZÀÈÉÌÒÙ\s&'"-]+:[^\n]+\[(?:QUARTIERE|CIT))/gm, '### $1')
-    .replace(/^### (.+)$/gm, `<div style='display:flex;align-items:center;gap:10px;margin:1.6rem 0 0.8rem;padding:10px 14px;background:linear-gradient(90deg,#1a1400,transparent);border-left:3px solid ${G};border-radius:0 8px 8px 0'><span style='font-family:Cormorant Garamond,serif;font-size:16px;font-weight:600;color:${GL}'>$1</span></div>`)
+    .replace(/^### (.+)$/gm, (_, t) => {
+      const label = t.match(/\[(quartiere|città|citta)\]/i)?.[0] || '';
+      const name = t.replace(/\[.*?\]/g,'').trim();
+      const badge = label ? `<span style='font-size:10px;color:${G};background:#1a1400;border:.5px solid ${G};border-radius:10px;padding:2px 8px;margin-left:8px;font-family:Inter,sans-serif;font-weight:500'>${label.toLowerCase()}</span>` : '';
+      return `<div style='display:flex;align-items:center;gap:6px;margin:1.6rem 0 0.8rem;padding:10px 14px;background:linear-gradient(90deg,#1a1400,transparent);border-left:3px solid ${G};border-radius:0 8px 8px 0'><span style='font-family:Cormorant Garamond,serif;font-size:16px;font-weight:600;color:${GL}'>${name}</span>${badge}</div>`;
+    })
     .replace(/^## (.+)$/gm, `<div style='font-size:11px;letter-spacing:2px;color:${G};text-transform:uppercase;margin:1.4rem 0 0.6rem;border-top:0.5px solid #2a2a2a;padding-top:1rem;font-weight:600'>$1</div>`)
     .replace(/^(Giorno \d+(?:(?!MATTINA|POMERIGGIO|SERA).)+)$/gm, `<div style='color:${GL};font-weight:700;margin-top:1.8rem;font-size:15px;border-top:0.5px solid #2a2a2a;padding-top:1.2rem;display:block'>$1</div>`)
     .replace(/^MATTINA$/gm,    `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Mattina</span></div>`)
@@ -113,7 +105,6 @@ function mdHtml(t) {
     });
 }
 
-// Rileva dispositivo mobile (Android o iOS)
 function isMobile() {
   if (typeof navigator === 'undefined') return false;
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
@@ -125,23 +116,19 @@ async function callAI(userMsg, maxTok = 1000, onChunk) {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: userMsg,
-        maxTokens: maxTok,
-        stream: !mobile,
-      }),
+      body: JSON.stringify({ message: userMsg, maxTokens: maxTok, stream: !mobile }),
     });
     if (!res.ok) return '';
 
-    // Mobile: risposta JSON diretta (no streaming)
     if (mobile) {
+      // Su mobile: risposta JSON completa in una volta
       const data = await res.json();
       const text = data?.content?.[0]?.text || '';
-      if (onChunk && text) onChunk(text);
+      if (text && onChunk) onChunk(text);
       return text;
     }
 
-    // Desktop: streaming SSE
+    // Desktop: streaming SSE progressivo
     const reader = res.body.getReader();
     const dc = new TextDecoder();
     let full = '';
@@ -227,7 +214,7 @@ function haversine([lat1,lon1],[lat2,lon2]) {
 /* ─── Inline CSS (scoped to the planner) ───────────────────────────────── */
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@300;400;500&display=swap');
-.planner-wrap *{box-sizing:border-box;margin:0;padding:0}
+html,body{margin:0;padding:0;background:#0d0d0d;overflow-x:hidden}.planner-wrap *{box-sizing:border-box;margin:0;padding:0}
 .planner-wrap{background:#0d0d0d;min-height:100vh;font-family:'Inter',sans-serif;color:#e8e8e8;display:flex;flex-direction:column;align-items:center;padding:2rem 1rem 3rem}
 .p-logo{display:flex;align-items:center;gap:14px;margin-bottom:6px}
 .p-li{width:48px;height:48px;background:#C9A84C;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px}
@@ -312,7 +299,7 @@ const CSS = `
 .p-ync:hover{border-color:#C9A84C;background:#1a1400}
 .p-dpick{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .p-save-bar{background:#1a1400;border:.5px solid #C9A84C;border-radius:10px;padding:10px 16px;font-size:12px;color:#e8c97a;margin-top:1rem;display:flex;align-items:center;gap:8px}
-@media(max-width:600px){.guide-grid{grid-template-columns:1fr!important}.p-bc{grid-template-columns:1fr 1fr}.p-inp,.p-ta{font-size:16px;-webkit-text-size-adjust:100%}}
+@media(max-width:600px){.guide-grid{grid-template-columns:1fr!important}.p-bc{grid-template-columns:1fr 1fr}.p-inp,.p-ta{font-size:16px}}
 `;
 
 /* ─── Sub-components ────────────────────────────────────────────────────── */
@@ -481,12 +468,12 @@ export default function PlannerPage() {
   }, [draftLoad]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const t = setTimeout(() => {
       if (!progBarRef.current) return;
       const active = progBarRef.current.querySelector('.p-sc.act');
       if (active) active.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' });
     }, 100);
-    return () => clearTimeout(timer);
+    return () => clearTimeout(t);
   }, [step]);
 
   /* ── helpers ── */
@@ -562,7 +549,7 @@ export default function PlannerPage() {
     if (!inp.trim()) return;
     const d = inp.trim(); setDest(d); setInp(''); setAiPerLoad(true); setStep(2);
     await callAI(
-      `Descrivi in 4-5 bullet i periodi migliori per visitare ${d}: mesi ideali, clima, pro e contro. NON citare anni specifici. Ogni bullet deve essere una frase completa con senso compiuto. Usa bullet -.`,
+      `Descrivi in 4-5 bullet i periodi migliori per visitare ${d}: mesi ideali, clima, pro e contro. NON citare anni specifici. Ogni bullet deve essere una frase completa. Usa bullet -.`,
       600, t => setAiPer(t)
     );
     setAiPerLoad(false);
@@ -650,7 +637,7 @@ export default function PlannerPage() {
     for (let att = 1; att <= 2; att++) {
       const msg =
         `Elenca ESATTAMENTE 3 hotel reali di ${cityName}, fascia ${bdg} (${hint}).` +
-        (att > 1 ? ' SECONDO TENTATIVO: devi restituire obbligatoriamente 3 hotel.' : '') +
+        (att > 1 ? ' SECONDO TENTATIVO: restituisci obbligatoriamente 3 hotel.' : '') +
         `\nRispondi SOLO con JSON array (nessun testo prima o dopo):\n` +
         `[{"name":"Hotel A","stars":4,"zone":"centro","price":"euro150/notte","why":"ottima posizione","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
         `{"name":"Hotel B","stars":3,"zone":"zona","price":"euro90/notte","why":"ottimo prezzo","pros":["p1","p2","p3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
@@ -759,8 +746,8 @@ export default function PlannerPage() {
       `Itinerario bozza per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, alloggio ${hotel}, ${trav()}.\n` +
       `Piano visite:\n${activeText}\n\n` +
       `FORMATO OBBLIGATORIO per ogni giorno:\n\n**Giorno 1 - Titolo**\n\nMATTINA\n- Attivita 1 (durata)\n- Attivita 2 (durata)\n\nPOMERIGGIO\n- Attivita 1 (durata)\n- Attivita 2 (durata)\n\nSERA\n- Attivita 1\n- Attivita 2\n\n---\n\n` +
-      `REGOLE ASSOLUTE:\n1. Ogni giorno DEVE avere MATTINA, POMERIGGIO e SERA con almeno 2 attivita ciascuna\n2. MATTINA/POMERIGGIO/SERA su riga completamente isolata\n3. Ogni attivita su riga separata con -\n4. Ogni giorno separato da ---\n5. VIETATE tabelle markdown\n\n` +
-      `## LOGISTICA GENERALE\nUNA voce per categoria, una riga ciascuna:\n- Trasporti: [come spostarsi, mezzi consigliati]\n- Pagamenti: [carta o contanti, dettagli locali]\n- App utili: [2-3 app specifiche]\n- Prenotazioni: [cosa prenotare e quando]\n- Budget: [stima giornaliera a persona]\n` +
+      `REGOLE ASSOLUTE: 1) Ogni giorno DEVE avere MATTINA POMERIGGIO e SERA con almeno 2 attivita ciascuna. 2) MATTINA/POMERIGGIO/SERA su riga isolata. 3) Ogni attivita su riga separata con -. 4) Ogni giorno separato da ---. 5) VIETATE tabelle markdown.\n\n` +
+      `## LOGISTICA GENERALE\nUNA voce per categoria:\n- Trasporti: [mezzi consigliati]\n- Pagamenti: [carta o contanti]\n- App utili: [2-3 app]\n- Prenotazioni: [cosa prenotare]\n- Budget: [stima giornaliera a persona]\n` +
       `Scrivi in italiano.`;
     await callAI(msg, 10000, t => setDraftText(t));
     setDraftLoad(false);
@@ -792,7 +779,7 @@ export default function PlannerPage() {
       if (tr.includes('auto'))  return `## TRASPORTO\nViaggio in ${transport} da ${departure} a ${dest}. Percorso, autostrade, soste e parcheggi.\n`;
       if (tr.includes('treno')) return `## TRASPORTO\nViaggio in treno da ${departure} a ${dest}. Trenitalia o Italo: orari, prezzi, stazione.\nLINK https://www.trenitalia.com\n`;
       if (tr.includes('bus'))   return `## TRASPORTO\nViaggio in bus da ${departure} a ${dest}. Compagnie, fermate, orari.\n`;
-      return `## VOLO CONSIGLIATO\nElenca le migliori opzioni da ${departure} a ${dest} per ${period} ${y} in formato bullet (VIETATE tabelle):\n- **Opzione consigliata**: compagnia, scali, durata, fascia prezzo a/r a persona, motivo\n- **Alternativa economica**: compagnia, scali, durata, fascia prezzo\n- **Alternativa diretta**: compagnia, durata, fascia prezzo (se disponibile)\nLINK https://www.google.com/travel/flights?q=${encodeURIComponent(`${departure} ${dest}`)}\nLINK https://www.skyscanner.it/voli-per/${encodeURIComponent(dest.toLowerCase())}\n`;
+      return `## VOLO CONSIGLIATO\nOpzioni di volo da ${departure} a ${dest} per ${period} ${y} (VIETATE tabelle):\n- **Opzione consigliata**: compagnia, scali, durata, fascia prezzo a/r a persona, motivo\n- **Alternativa economica**: compagnia, scali, durata, fascia prezzo\n- **Alternativa diretta**: compagnia, durata, fascia prezzo (se disponibile volo diretto)\nLINK https://www.google.com/travel/flights?q=${encodeURIComponent(`${departure} ${dest}`)}\nLINK https://www.skyscanner.it/voli-per/${encodeURIComponent(dest.toLowerCase())}\n`;
     })();
     const formatStr = isMPS
       ? 'Dividi ogni giorno in tre blocchi: MATTINA / POMERIGGIO / SERA (righe separate maiuscolo). Elenca attivita come bullet - sotto ogni blocco.'
@@ -800,7 +787,7 @@ export default function PlannerPage() {
     const msg =
       `Itinerario completo per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, ${trav()}, partenza ${departure}, alloggio ${selStr}.\n` +
       `Formato giorni: ${formatStr}. Separa giorni con ---. Scrivi in italiano con ## per sezioni:\n` +
-      `## PRESENTAZIONE DELLA DESTINAZIONE\nDescrivi la destinazione in 2-3 frasi evocative. NON includere voli o trasporti qui.\n` +
+      `## PRESENTAZIONE DELLA DESTINAZIONE\n` +
       transportBlock +
       `## ALLOGGIO\n${selStr}: zona e perche ottimale\nLINK https://www.booking.com/search.html?ss=${encodeURIComponent(dest)}\n` +
       `## ITINERARIO GIORNO PER GIORNO\nSEGUI ESATTAMENTE questa bozza approvata aggiungendo solo dettagli e link:\n${draftText.slice(0, 2500)}\n\nPer ogni attivita aggiungi: LINK url-biglietti${wantsFood ? ' e LINK url-ristorante' : ''}\n` +

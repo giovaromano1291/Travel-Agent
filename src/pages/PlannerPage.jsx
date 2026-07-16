@@ -60,7 +60,8 @@ function parseDurationToNights(d) {
 
 function mdHtml(t) {
   t = t.replace(/\r/g, '');
-  t = t.replace(/^# .+$/gm, '');
+  // Rimuovi marcatori heading rimasti come testo grezzo, ma mantieni il contenuto
+  t = t.replace(/^#{1,3}\s+(.*)$/gm, '$1');
   const MPS = ['Mattina','MATTINA','Pomeriggio','POMERIGGIO','Sera','SERA'];
   const lns = t.split('\n');
   const out = [];
@@ -107,7 +108,9 @@ function mdHtml(t) {
 
 function isMobile() {
   if (typeof navigator === 'undefined') return false;
-  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  // iPad iOS 13+ si identifica come MacIntel ma ha maxTouchPoints > 1
+  const isIpad = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+  return isIpad || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 }
 
 async function callAI(userMsg, maxTok = 1000, onChunk) {
@@ -224,7 +227,7 @@ html,body{margin:0;padding:0;background:#0d0d0d;overflow-x:hidden}.planner-wrap 
 .p-dl{width:100%;max-width:800px;height:.5px;background:#2a2a2a;margin-bottom:1.5rem}
 .p-back{display:flex;align-items:center;gap:6px;background:transparent;border:none;color:#777;font-size:12px;cursor:pointer;margin-bottom:.8rem;padding:4px 0;font-family:'Inter',sans-serif;transition:color .2s;width:100%;max-width:720px}
 .p-back:hover{color:#C9A84C}
-.p-prog{display:flex;align-items:center;justify-content:flex-start;margin-bottom:2rem;width:100%;max-width:920px;overflow-x:auto;padding:.5rem 0 .8rem;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.p-prog{display:flex;align-items:center;justify-content:center;margin-bottom:2rem;width:100%;max-width:920px;overflow-x:auto;padding:.5rem 0 .8rem;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .p-prog::-webkit-scrollbar{display:none}
 .p-sn{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
 .p-sc{width:28px;height:28px;border-radius:50%;border:1.5px solid #2a2a2a;display:flex;align-items:center;justify-content:center;font-size:10px;color:#888;transition:all .3s;flex-shrink:0}
@@ -297,9 +300,9 @@ html,body{margin:0;padding:0;background:#0d0d0d;overflow-x:hidden}.planner-wrap 
 .p-yn{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:.5rem}
 .p-ync{background:#111;border:.5px solid #333;border-radius:12px;padding:1.4rem 1rem;cursor:pointer;transition:all .2s;text-align:center}
 .p-ync:hover{border-color:#C9A84C;background:#1a1400}
-.p-dpick{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.p-dpick{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%}.p-dpick>div{min-width:0;overflow:hidden}
 .p-save-bar{background:#1a1400;border:.5px solid #C9A84C;border-radius:10px;padding:10px 16px;font-size:12px;color:#e8c97a;margin-top:1rem;display:flex;align-items:center;gap:8px}
-@media(max-width:600px){.guide-grid{grid-template-columns:1fr!important}.p-bc{grid-template-columns:1fr 1fr}.p-inp,.p-ta{font-size:16px}}
+@media(max-width:600px){.p-prog{justify-content:flex-start!important}.guide-grid{grid-template-columns:1fr!important}.p-bc{grid-template-columns:1fr 1fr}.p-inp,.p-ta{font-size:16px}.p-dpick{grid-template-columns:1fr!important}.p-dpick input[type=date]{width:100%;min-width:0;font-size:14px;-webkit-appearance:none}}
 `;
 
 /* ─── Sub-components ────────────────────────────────────────────────────── */
@@ -636,25 +639,26 @@ export default function PlannerPage() {
       : '3-4 stelle: NH Hotels, Starhotels, Marriott Courtyard. Fascia 120-250 eur/notte.';
     for (let att = 1; att <= 2; att++) {
       const msg =
-        `Elenca ESATTAMENTE 3 hotel reali di ${cityName}, fascia ${bdg} (${hint}).` +
-        (att > 1 ? ' SECONDO TENTATIVO: restituisci obbligatoriamente 3 hotel.' : '') +
-        `\nJSON ARRAY con esattamente 3 oggetti, nessun testo aggiuntivo:\n` +
-        `[{"name":"NomeReale1","stars":4,"zone":"quartiere","price":"€X/notte","why":"motivo","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
-        `{"name":"NomeReale2","stars":3,"zone":"zona","price":"€Y/notte","why":"motivo","pros":["p1","p2","p3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
-        `{"name":"NomeReale3","stars":4,"zone":"zona","price":"€Z/notte","why":"motivo","pros":["p1","p2","p3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
+        `Sei un esperto di hotel. Elenca 3 hotel con NOMI PROPRI REALI (non generici) a ${cityName}, TUTTI fascia ${bdg} (${hint}).` +
+        (att > 1 ? ' ATTENZIONE: usa nomi di hotel VERI che esistono a ${cityName}. NON usare nomi come Hotel A, Hotel B, NomeReale.' : '') +
+        `\nTutti e 3 devono essere fascia ${bdg}. Prezzo indicativo reale in euro/notte. best:true solo per il migliore qualita/prezzo.\n` +
+        `Rispondi SOLO con questo JSON (nessun testo prima o dopo):\n` +
+        `[{"name":"[nome hotel reale]","stars":4,"zone":"quartiere reale","price":"€XXX/notte","why":"motivo specifico","pros":["pro1","pro2","pro3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
+        `{"name":"[nome hotel reale 2]","stars":4,"zone":"quartiere","price":"€YYY/notte","why":"motivo","pros":["pro1","pro2","pro3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"},` +
+        `{"name":"[nome hotel reale 3]","stars":4,"zone":"quartiere","price":"€ZZZ/notte","why":"motivo","pros":["pro1","pro2","pro3"],"best":false,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
       const txt = await callAI(msg, 2000, null);
       if (!txt) continue;
       try {
         const m = txt.match(/\[[\s\S]*?\]/);
         if (m) {
           const arr = JSON.parse(m[0]);
-          if (Array.isArray(arr) && arr.length >= 3) {
+          if (Array.isArray(arr) && arr.length > 0) {
             if (!arr.some(h => h.best)) arr[0].best = true;
-            return arr.slice(0, 3);
-          }
-          if (att === 2 && Array.isArray(arr) && arr.length > 0) {
-            if (!arr.some(h => h.best)) arr[0].best = true;
-            return arr;
+            // Se abbiamo almeno 3, ritorna i primi 3
+            if (arr.length >= 3) return arr.slice(0, 3);
+            // Se abbiamo meno di 3 e siamo al secondo tentativo, usa quelli disponibili
+            if (att === 2) return arr;
+            // Se abbiamo meno di 3 al primo tentativo, riprova
           }
         }
       } catch {}
@@ -676,11 +680,14 @@ export default function PlannerPage() {
         let hotels = await fetchHotelsForCity(searchCity, budget);
         if (!hotels || !Array.isArray(hotels) || hotels.length < 3) {
           const starsLabel = budget === 'luxury' ? 5 : budget === 'economico' ? 3 : 4;
+          const priceRange = budget === 'luxury' ? '€350-500/notte' : budget === 'economico' ? '€60-100/notte' : '€120-200/notte';
+          const priceRange2 = budget === 'luxury' ? '€280-350/notte' : budget === 'economico' ? '€45-70/notte' : '€90-130/notte';
+          const priceRange3 = budget === 'luxury' ? '€500-800/notte' : budget === 'economico' ? '€80-120/notte' : '€180-280/notte';
           const baseUrl = `https://www.booking.com/search.html?ss=${encodeURIComponent(searchCity)}${starsQ}`;
           hotels = [
-            { name: `Hotel ${budget} consigliato a ${searchCity}`, stars: starsLabel, zone: 'centro', price: 'vedi Booking', why: `Miglior scelta ${budget} a ${searchCity} — clicca per verificare disponibilità`, pros: ['ottima posizione', 'recensioni eccellenti', 'cancellazione gratuita'], best: true, url: baseUrl },
-            { name: `Alternativa economica a ${searchCity}`, stars: Math.max(starsLabel - 1, 2), zone: 'zona centrale', price: 'vedi Booking', why: `Buon rapporto qualità/prezzo a ${searchCity}`, pros: ['prezzi competitivi', 'recensioni positive', 'buona posizione'], best: false, url: baseUrl },
-            { name: `Opzione premium a ${searchCity}`, stars: Math.min(starsLabel + 1, 5), zone: 'centro storico', price: 'vedi Booking', why: `Comfort superiore a ${searchCity}`, pros: ['servizi completi', 'colazione inclusa', 'personale eccellente'], best: false, url: baseUrl },
+            { name: `Hotel ${budget} consigliato a ${searchCity}`, stars: starsLabel, zone: 'centro', price: priceRange, why: `Miglior rapporto qualità/prezzo fascia ${budget} a ${searchCity}`, pros: ['ottima posizione centrale', 'recensioni eccellenti', 'cancellazione gratuita'], best: true, url: baseUrl },
+            { name: `Seconda scelta fascia ${budget} a ${searchCity}`, stars: starsLabel, zone: 'zona centrale', price: priceRange2, why: `Valida alternativa ${budget} a ${searchCity} con ottimo prezzo`, pros: ['prezzi competitivi', 'recensioni positive', 'buona posizione'], best: false, url: baseUrl },
+            { name: `Terza opzione fascia ${budget} a ${searchCity}`, stars: starsLabel, zone: 'centro storico', price: priceRange3, why: `Opzione ${budget} con servizi superiori a ${searchCity}`, pros: ['servizi completi', 'colazione inclusa', 'personale eccellente'], best: false, url: baseUrl },
           ];
         }
         const existIdx = bases.findIndex(b => b.city === cl.name);
@@ -744,32 +751,18 @@ export default function PlannerPage() {
     const activeText = (revText || planText).slice(0, 1200);
     const mobile = isMobile();
 
-    // Su mobile: dividiamo in 2 chiamate piu piccole per evitare timeout
+    // Su mobile: prompt compatto per stare nei limiti
     if (mobile) {
       const nights = parseDurationToNights(duration) || 4;
-      const half = Math.ceil(nights / 2);
-
-      // Prima meta dei giorni
-      const msg1 =
-        `Itinerario per ${dest}, ${period} ${y}, ${style}, budget ${budget}, alloggio ${hotel}, ${trav()}.\n` +
-        `Genera SOLO i giorni 1-${half} (su ${nights} totali).\n` +
-        `Piano visite: ${activeText.slice(0, 600)}\n\n` +
-        `FORMATO per ogni giorno:\n**Giorno N - Titolo**\nMATTINA\n- Attivita 1\n- Attivita 2\nPOMERIGGIO\n- Attivita 1\n- Attivita 2\nSERA\n- Attivita 1\n---\n` +
-        `Ogni giorno DEVE avere MATTINA POMERIGGIO SERA. Scrivi in italiano.`;
-      const part1 = await callAI(msg1, 4000, null);
-
-      // Seconda meta dei giorni + logistica
-      const msg2 =
-        `Itinerario per ${dest}, ${period} ${y}, ${style}, budget ${budget}, alloggio ${hotel}, ${trav()}.\n` +
-        `Genera i giorni ${half + 1}-${nights}.\n` +
-        `Piano visite: ${activeText.slice(600)}\n\n` +
-        `FORMATO per ogni giorno:\n**Giorno N - Titolo**\nMATTINA\n- Attivita 1\n- Attivita 2\nPOMERIGGIO\n- Attivita 1\n- Attivita 2\nSERA\n- Attivita 1\n---\n\n` +
-        `Poi aggiungi:\n## LOGISTICA GENERALE\n- Trasporti: [mezzi]\n- Pagamenti: [carta/contanti]\n- App utili: [2-3 app]\n- Prenotazioni: [cosa]\n- Budget: [stima/giorno]\n` +
-        `Ogni giorno DEVE avere MATTINA POMERIGGIO SERA. Scrivi in italiano.`;
-      const part2 = await callAI(msg2, 4000, null);
-
-      const full = (part1 || '') + '\n\n' + (part2 || '');
-      setDraftText(full);
+      const msg =
+        `Bozza itinerario: ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, alloggio ${hotel}, ${trav()}.\n` +
+        `Piano: ${activeText.slice(0, 800)}\n\n` +
+        `Genera esattamente ${nights} giorni con questo formato PRECISO:\n` +
+        `**Giorno 1 - Titolo**\nMATTINA\n- attivita 1\n- attivita 2\nPOMERIGGIO\n- attivita 1\n- attivita 2\nSERA\n- attivita 1\n---\n` +
+        `Ripeti per tutti i ${nights} giorni. Ogni giorno DEVE avere MATTINA POMERIGGIO SERA.\n\n` +
+        `## LOGISTICA GENERALE\n- Trasporti: [mezzi]\n- Pagamenti: [carta/contanti]\n- App utili: [app]\n- Prenotazioni: [cosa]\n- Budget: [stima/giorno]\nScrivi in italiano.`;
+      const result = await callAI(msg, 6000, null);
+      setDraftText(result || '');
     } else {
       // Desktop: una sola chiamata grande
       const msg =

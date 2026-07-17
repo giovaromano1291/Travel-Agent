@@ -60,116 +60,68 @@ function parseDurationToNights(d) {
 
 function mdHtml(t) {
   t = t.replace(/\r/g, '');
-  // Rimuovi marcatori heading rimasti come testo grezzo, ma mantieni il contenuto
-  // Rimuovi ### solo se seguiti da spazio (heading veri), non testo troncato
-  t = t.replace(/^(#{1,3})\s+(.*)$/gm, '$2');
-  // Spezza "**Giorno N...**" dal testo che segue sulla stessa riga
-  // Es: "**Giorno 2 – Titolo** testo mattina" → "**Giorno 2 – Titolo**\ntesto mattina"
-  t = t.replace(/(\*\*Giorno\s+\d+[^*]*\*\*)\s+([^*\n])/g, '$1\n$2');
-  // Spezza "Giorno N – Titolo: testo" dove il titolo è seguito da attività
-  t = t.replace(/^(\*{0,2}Giorno\s+\d+[^\n]+?)(\s+[-◆•]\s)/gm, '$1\n$2');
-  // Normalizza TUTTE le varianti di Mattina/Pomeriggio/Sera
-  // **Mattina**, Mattina:, mattina, MATTINA → MATTINA su riga isolata
-  t = t.replace(/\*\*(Mattina|Pomeriggio|Sera)\*\*:?/gi, (_, m) => m.toUpperCase());
-  t = t.replace(/^(Mattina|Pomeriggio|Sera):?\s*$/gmi, m => m.trim().replace(/:$/, '').toUpperCase());
-  // Se Mattina/Pomeriggio/Sera è in fondo a una riga, spezza
-  t = t.replace(/([^\n]+)\s+(MATTINA|POMERIGGIO|SERA)$/gm, '$1\n$2');
-  // Se Giorno N è seguito da Mattina sulla stessa riga, spezza
-  t = t.replace(/(Giorno\s+\d+[^\n]+?)\s+(MATTINA|POMERIGGIO|SERA)/g, '$1\n$2');
+  t = t.replace(/^# .+$/gm, '');
+  const MPS = ['Mattina','MATTINA','Pomeriggio','POMERIGGIO','Sera','SERA'];
   const lns = t.split('\n');
   const out = [];
   for (let i = 0; i < lns.length; i++) {
     const ln = lns[i];
-    const tr = ln.trim();
-    // Riconosci tutte le varianti MPS su riga isolata
-    if (/^(MATTINA|POMERIGGIO|SERA)$/i.test(tr)) {
-      out.push(tr.toUpperCase());
-    } else {
-      out.push(ln);
+    let found = false;
+    for (const tag of MPS) {
+      if (ln.length > tag.length && ln.slice(-tag.length) === tag && ln.slice(-tag.length - 1, -tag.length) === ' ') {
+        const before = ln.slice(0, ln.length - tag.length - 1).trim();
+        if (before.length > 0) { out.push(before); out.push(''); out.push(tag.toUpperCase()); found = true; break; }
+      }
+    }
+    if (!found) {
+      const tr = ln.trim();
+      out.push(tr === 'Mattina' || tr === 'Pomeriggio' || tr === 'Sera' ? tr.toUpperCase() : ln);
     }
   }
   t = out.join('\n');
   t = t.replace(/\.[ \t]+-[ \t]+/g, '.\n- ');
   t = t.replace(/([.!?])\s+(Trasporti|Pagamenti|App utili|Prenotazioni|Budget|App|Visto|Valigia):/g, '$1\n- $2:');
-  // Normalizza LOGISTICA GENERALE: assicura che abbia sempre ##
-  t = t.replace(/^(LOGISTICA GENERALE[^\n]*)$/gm, (m) => {
-    if (!m.startsWith('##')) return '## ' + m;
-    return m;
-  });
-  // Forza newline dopo ## LOGISTICA GENERALE se seguito da testo sulla stessa riga
-  t = t.replace(/(LOGISTICA GENERALE)\s+(Trasporti|Pagamenti)/g, '$1\n- $2');
-  // Spezza App utili discorsive in bullet separati
-  // Es: "- App utili: Grab – taxi | Google Maps – nav" → bullet separati
-  t = t.replace(/^([-*]\s*App utili:?\s*)(.+)$/gm, (_, prefix, apps) => {
-    // Divide per separatori comuni: " | ", " — ", " – ", "; "
-    const items = apps.split(/\s*[|;]\s*|\s*[–—]\s*(?=[A-Z])/);
-    if (items.length <= 1) return prefix + apps;
-    return prefix + items[0] + '\n' + items.slice(1).map(a => '- ' + a.trim()).join('\n');
-  });
-  // Spezza "Budget Stimato" e nota finale su riga separata
-  t = t.replace(/([^\n])(Budget Stimato|Nota su |💡)/g, '$1\n$2');
-  // ── Rimuovi tabelle markdown ────────────────────────────────
-  // 1. Righe separatore |---|---|
-  t = t.replace(/^[\s|]*[-|]{3,}[\s|]*$/gm, '');
-  // 2. Righe con pipe che formano tabelle
-  t = t.replace(/^\|(.+)\|\s*$/gm, (_, inner) =>
-    inner.split('|').map(s => s.trim()).filter(Boolean).join(' — ')
-  );
-  // 3. Pipe isolati nel testo "App | Funzione | |------|"
-  t = t.replace(/\s*\|\s*-{3,}[\s|]*/g, ' ');
-  // 4. Righe tipo "voce | valore | valore" non gestite sopra
-  t = t.replace(/^([^\n*#`>]+\|[^\n]+)$/gm, (m) => {
-    if (m.includes('---')) return '';
-    return m.split('|').map(s => s.trim()).filter(Boolean).join(' — ');
-  });
-  // ────────────────────────────────────────────────────────────
   t = t.replace(/\n{3,}/g, '\n\n');
   return t
     .replace(/\*\*(.*?)\*\*/g, `<strong style='color:${GL};font-weight:500'>$1</strong>`)
     .replace(/\*([^*\n]+?)\*/g, `<em style='color:#bbb;font-style:italic'>$1</em>`)
     .replace(/^([A-Z][A-ZÀÈÉÌÒÙ\s&'"-]+:[^\n]+\[(?:QUARTIERE|CIT))/gm, '### $1')
-    .replace(/^### (.+)$/gm, (_, t) => {
-      const label = t.match(/\[(quartiere|città|citta)\]/i)?.[0] || '';
-      const name = t.replace(/\[.*?\]/g,'').trim();
-      // Normalizza label: [CITTA] → città, [QUARTIERE] → quartiere
-      const labelNorm = label.replace(/\[/g,'').replace(/\]/g,'')
-        .replace(/CITT[AÀ]/i, 'città')
-        .replace(/QUARTIERE/i, 'quartiere')
-        .toLowerCase();
-      const badge = label ? `<span style='font-size:10px;color:${G};background:#1a1400;border:.5px solid ${G};border-radius:10px;padding:2px 8px;margin-left:8px;font-family:Inter,sans-serif;font-weight:500'>${labelNorm}</span>` : '';
-      return `<div style='display:flex;align-items:center;gap:6px;margin:1.8rem 0 0.8rem;padding:12px 16px;background:linear-gradient(90deg,#1a1400,transparent);border-left:4px solid ${G};border-radius:0 8px 8px 0'><span style='font-family:Cormorant Garamond,serif;font-size:18px;font-weight:700;color:${GL};letter-spacing:0.5px'>${name}</span>${badge}</div>`;
-    })
-    .replace(/^## (.+)$/gm, (_, sec) => {
-      const isLog = /LOGISTICA/i.test(sec);
-      return `<div style='font-size:11px;letter-spacing:2px;color:${G};text-transform:uppercase;${isLog ? 'margin:3rem 0 1rem;border-top:2px solid ' + G + ';padding-top:1.6rem;' : 'margin:1.4rem 0 0.6rem;border-top:0.5px solid #2a2a2a;padding-top:1rem;'}font-weight:600'>${sec}</div>`;
-    })
+    .replace(/^### (.+)$/gm, `<div style='display:flex;align-items:center;gap:10px;margin:1.6rem 0 0.8rem;padding:10px 14px;background:linear-gradient(90deg,#1a1400,transparent);border-left:3px solid ${G};border-radius:0 8px 8px 0'><span style='font-family:Cormorant Garamond,serif;font-size:16px;font-weight:600;color:${GL}'>$1</span></div>`)
+    .replace(/^## (.+)$/gm, `<div style='font-size:11px;letter-spacing:2px;color:${G};text-transform:uppercase;margin:1.4rem 0 0.6rem;border-top:0.5px solid #2a2a2a;padding-top:1rem;font-weight:600'>$1</div>`)
     .replace(/^(Giorno \d+(?:(?!MATTINA|POMERIGGIO|SERA).)+)$/gm, `<div style='color:${GL};font-weight:700;margin-top:1.8rem;font-size:15px;border-top:0.5px solid #2a2a2a;padding-top:1.2rem;display:block'>$1</div>`)
     .replace(/^MATTINA$/gm,    `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Mattina</span></div>`)
     .replace(/^POMERIGGIO$/gm, `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1.2rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Pomeriggio</span></div>`)
     .replace(/^SERA$/gm,       `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1.2rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Sera</span></div>`)
     .replace(/^---$/gm, `<div style='height:1px;background:#2a2a2a;margin:1.4rem 0'></div>`)
-    .replace(/^LINK (.+)$/gm, `<div style='margin:0.3rem 0 0.3rem 1rem;font-size:12px'><a href='$1' target='_blank' rel='noreferrer' style='color:#6ab0ff;text-decoration:none'>🔗 $1</a></div>`)
-    // Converti link markdown [testo](url) in link cliccabili
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, `<a href='$2' target='_blank' rel='noreferrer' style='color:#6ab0ff;text-decoration:underline'>$1</a>`)
+    .replace(/^LINK (.+)$/gm, `<div style='margin:0.3rem 0 0.3rem 1rem;color:#6ab0ff;font-size:12px'>Prenota: $1</div>`)
     .replace(/^[*-] (.+)$/gm, (_, p1) => {
       const lb = p1.replace(/^([A-Za-z\u00c0-\u00ff\s]+:)\s*/, `<strong style='color:${GL};font-weight:600'>$1</strong> `);
       return `<div style='display:flex;align-items:flex-start;gap:8px;margin:0.35rem 0;color:#ccc;font-size:13px;line-height:1.6'><span style='color:${G};flex-shrink:0'>◆</span><span>${lb}</span></div>`;
     });
 }
 
-function scrollTop() {
-  try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch(e) { window.scrollTo(0, 0); }
-}
-
 function isMobile() {
   if (typeof navigator === 'undefined') return false;
-  // iPad iOS 13+ si identifica come MacIntel ma ha maxTouchPoints > 1
   const isIpad = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
   return isIpad || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 }
 
+// Ottimizzazione geografica: percorso "a goccia" per viaggi in auto
+function logisticaPrompt(departure, dest, transport) {
+  if (!transport) return '';
+  const t = transport.toLowerCase();
+  if (!t.includes('auto') && !t.includes('noleggio')) return '';
+  return '\n\nOTTIMIZZAZIONE LOGISTICA (viaggio in ' + transport + '):\n' +
+    'Ordina le tappe come percorso a goccia (andata/ritorno efficiente):\n' +
+    '1. Parti da ' + departure + '\n' +
+    '2. Raggiungi prima le mete PIU LONTANE da ' + departure + '\n' +
+    '3. Prosegui verso mete intermedie\n' +
+    '4. Concludi con tappe gia sulla via del ritorno verso ' + departure + '\n' +
+    'Es. Roma-Umbria: Spoleto -> Assisi -> Perugia -> Orvieto (gia verso Roma)\n' +
+    'Forma un arco geografico efficiente, non un percorso casuale.';
+}
+
 async function callAI(userMsg, maxTok = 1000, onChunk) {
-  const mobile = isMobile();
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
@@ -177,49 +129,18 @@ async function callAI(userMsg, maxTok = 1000, onChunk) {
       body: JSON.stringify({ message: userMsg, maxTokens: maxTok, stream: true }),
     });
     if (!res.ok) return '';
-
-    if (mobile) {
-      // Mobile: streaming SSE con fallback per Safari iOS
-      // Safari a volte non supporta ReadableStream.getReader() correttamente
-      try {
-        if (!res.body || typeof res.body.getReader !== 'function') {
-          // Fallback Safari: leggi tutta la risposta come testo SSE
-          const text = await res.text();
-          let full = '';
-          for (const line of text.split('\n')) {
-            if (line.startsWith('data: ')) {
-              try {
-                const jj = JSON.parse(line.slice(6));
-                if (jj.delta?.text) full += jj.delta.text;
-              } catch {}
-            }
-          }
-          if (full && onChunk) onChunk(full);
-          return full;
+    // Fallback Safari iOS: res.body.getReader non sempre disponibile
+    if (!res.body || typeof res.body.getReader !== 'function') {
+      const text = await res.text();
+      let full = '';
+      for (const line of text.split('\n')) {
+        if (line.startsWith('data: ')) {
+          try { const jj = JSON.parse(line.slice(6)); if (jj.delta?.text) full += jj.delta.text; } catch {}
         }
-        const reader = res.body.getReader();
-        const dc = new TextDecoder();
-        let full = '';
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          for (const line of dc.decode(value).split('\n')) {
-            if (line.startsWith('data: ')) {
-              try {
-                const jj = JSON.parse(line.slice(6));
-                if (jj.delta?.text) { full += jj.delta.text; if (onChunk) onChunk(full); }
-              } catch {}
-            }
-          }
-        }
-        return full;
-      } catch (e) {
-        console.error('Mobile streaming error:', e);
-        return '';
       }
+      if (onChunk && full) onChunk(full);
+      return full;
     }
-
-    // Desktop: streaming SSE progressivo
     const reader = res.body.getReader();
     const dc = new TextDecoder();
     let full = '';
@@ -305,7 +226,7 @@ function haversine([lat1,lon1],[lat2,lon2]) {
 /* ─── Inline CSS (scoped to the planner) ───────────────────────────────── */
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@300;400;500&display=swap');
-html,body{margin:0;padding:0;background:#0d0d0d;overflow-x:hidden}.planner-wrap *{box-sizing:border-box;margin:0;padding:0}
+.planner-wrap *{box-sizing:border-box;margin:0;padding:0}
 .planner-wrap{background:#0d0d0d;min-height:100vh;font-family:'Inter',sans-serif;color:#e8e8e8;display:flex;flex-direction:column;align-items:center;padding:2rem 1rem 3rem}
 .p-logo{display:flex;align-items:center;gap:14px;margin-bottom:6px}
 .p-li{width:48px;height:48px;background:#C9A84C;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px}
@@ -315,7 +236,7 @@ html,body{margin:0;padding:0;background:#0d0d0d;overflow-x:hidden}.planner-wrap 
 .p-dl{width:100%;max-width:800px;height:.5px;background:#2a2a2a;margin-bottom:1.5rem}
 .p-back{display:flex;align-items:center;gap:6px;background:transparent;border:none;color:#777;font-size:12px;cursor:pointer;margin-bottom:.8rem;padding:4px 0;font-family:'Inter',sans-serif;transition:color .2s;width:100%;max-width:720px}
 .p-back:hover{color:#C9A84C}
-.p-prog{display:flex;align-items:center;justify-content:center;margin-bottom:2rem;width:100%;max-width:920px;overflow-x:auto;padding:.5rem 0 .8rem;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.p-prog{display:flex;align-items:center;justify-content:center;margin-bottom:2rem;width:100%;max-width:920px;overflow-x:auto;padding:.5rem 0 .8rem;scrollbar-width:none}
 .p-prog::-webkit-scrollbar{display:none}
 .p-sn{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
 .p-sc{width:28px;height:28px;border-radius:50%;border:1.5px solid #2a2a2a;display:flex;align-items:center;justify-content:center;font-size:10px;color:#888;transition:all .3s;flex-shrink:0}
@@ -388,9 +309,15 @@ html,body{margin:0;padding:0;background:#0d0d0d;overflow-x:hidden}.planner-wrap 
 .p-yn{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:.5rem}
 .p-ync{background:#111;border:.5px solid #333;border-radius:12px;padding:1.4rem 1rem;cursor:pointer;transition:all .2s;text-align:center}
 .p-ync:hover{border-color:#C9A84C;background:#1a1400}
-.p-dpick{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%}.p-dpick>div{min-width:0;overflow:hidden}
+.p-dpick{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .p-save-bar{background:#1a1400;border:.5px solid #C9A84C;border-radius:10px;padding:10px 16px;font-size:12px;color:#e8c97a;margin-top:1rem;display:flex;align-items:center;gap:8px}
-@media(max-width:600px){.p-prog{justify-content:flex-start!important}.guide-grid{grid-template-columns:1fr!important}.p-bc{grid-template-columns:1fr 1fr}.p-inp,.p-ta{font-size:16px}.p-dpick{grid-template-columns:1fr!important}.p-dpick input[type=date]{width:100%;min-width:0;font-size:14px;-webkit-appearance:none}}
+/* Mobile */
+html,body{margin:0;padding:0;background:#0d0d0d;overflow-x:hidden}
+@media(max-width:600px){
+  .p-prog{justify-content:flex-start!important}
+  .p-inp[type="date"],.p-inp,.p-ta{font-size:16px}
+  .p-dpick{grid-template-columns:1fr!important}
+}
 `;
 
 /* ─── Sub-components ────────────────────────────────────────────────────── */
@@ -408,9 +335,7 @@ function ABox({ text, loading, lt, style: extraStyle }) {
     <div className="p-aib" style={extraStyle}>
       {loading && !text
         ? <Dots text={lt || 'Elaboro...'} />
-        : loading && text
-        ? <div style={{whiteSpace:'pre-wrap',fontSize:13,color:'#ccc',lineHeight:1.8}}>{text}<span className='p-cur'/></div>
-        : <div dangerouslySetInnerHTML={{ __html: mdHtml(text || '') }} />
+        : <div dangerouslySetInnerHTML={{ __html: mdHtml(text || '') + (loading ? "<span class='p-cur'></span>" : '') }} />
       }
     </div>
   );
@@ -560,11 +485,12 @@ export default function PlannerPage() {
     if (!draftLoad && draftLoadRef.current) { draftLoadRef.current = false; if (draftRef.current) draftRef.current.scrollTop = 0; }
   }, [draftLoad]);
 
+  // Scroll barra step su mobile: porta step attivo al centro
   useEffect(() => {
     const t = setTimeout(() => {
       if (!progBarRef.current) return;
       const active = progBarRef.current.querySelector('.p-sc.act');
-      if (active) active.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' });
+      if (active) active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     }, 100);
     return () => clearTimeout(t);
   }, [step]);
@@ -642,7 +568,7 @@ export default function PlannerPage() {
     if (!inp.trim()) return;
     const d = inp.trim(); setDest(d); setInp(''); setAiPerLoad(true); setStep(2);
     await callAI(
-      `Descrivi in 4-5 bullet i periodi migliori per visitare ${d}: mesi ideali, clima, pro e contro. NON citare anni specifici. Ogni bullet deve essere una frase completa. Usa bullet -.`,
+      `In 3-4 righe in italiano, i periodi migliori per visitare ${d} nel ${CY} o ${CY+1} (clima, eventi, affluenza). Usa bullet -.`,
       600, t => setAiPer(t)
     );
     setAiPerLoad(false);
@@ -665,7 +591,6 @@ export default function PlannerPage() {
   }
 
   async function genPlan(dep) {
-    scrollTop();
     setStep(8); setPlanLoad(true); setPlanText('');
     const y = detectYear(period); setTripYear(y);
     checkDistance(dep, dest);
@@ -673,7 +598,8 @@ export default function PlannerPage() {
       `Crea un piano visivo dell'itinerario per: ${dest}, ${period} ${y}, ${duration}${duration.includes('Weekend') ? ' (solo 2-3 giorni, max 2 destinazioni vicine)' : ''}, ${style}, ${trav()}, budget ${budget}.\n\n` +
       `REGOLA CRITICA SUL TIPO:\n- Usa [QUARTIERE] se ${dest} e una SINGOLA CITTA\n- Usa [CITTA] SOLO se l'itinerario tocca piu CITTA DIVERSE\n- Quartieri, arrondissement, zone di una stessa citta = SEMPRE [QUARTIERE]\n\n` +
       `FORMATO OBBLIGATORIO per ogni blocco:\n### NOME (N giorni) [TIPO]\n- **Cosa vedere**: luogo - perche\n- **Cosa fare**: attivita - descrizione\n- **Da non perdere**: esperienza - perche\n\n` +
-      `REGOLE:\n1. Solo ### per i titoli in MAIUSCOLO\n2. Niente tabelle\n3. Inizia SUBITO con il primo ### senza testo introduttivo\n4. La somma dei giorni deve corrispondere a: ${duration}\n5. Scrivi in italiano\n\n` +
+      `REGOLE:\n1. Solo ### per i titoli\n2. Niente tabelle\n3. Inizia subito col primo ###\n4. La somma dei giorni deve corrispondere a: ${duration}\n5. Scrivi in italiano\n\n` +
+      logisticaPrompt(dep, dest, transport) +
       `ESEMPIO singola citta (Parigi, 5gg):\n### LOUVRE & MARAIS (2 giorni) [QUARTIERE]\n- **Cosa vedere**: Museo del Louvre\n### MONTMARTRE (1 giorno) [QUARTIERE]\n### EIFFEL & SAINT-GERMAIN (2 giorni) [QUARTIERE]\n\n` +
       `ESEMPIO piu citta (Costa Azzurra, 7gg):\n### NIZZA (3 giorni) [CITTA]\n### MONACO (2 giorni) [CITTA]\n### CANNES (2 giorni) [CITTA]`;
     await callAI(msg, 1800, t => setPlanText(t));
@@ -681,14 +607,14 @@ export default function PlannerPage() {
   }
 
   async function genRevised() {
-    scrollTop();
     setStep(9); setRevLoad(true); setRevText(''); setMods('');
     const y = tripYear || detectYear(period);
     const msg =
       `Piano originale per ${dest} (${period} ${y}):\n${planText}\n\n` +
       `Modifiche richieste: ${mods}\n\n` +
       `Rielabora con STESSO FORMATO: ### NOME (N giorni) [TIPO]\n- **Cosa vedere/fare/da non perdere**\n` +
-      `REGOLE: solo ###, niente tabelle, somma giorni = ${duration}. Scrivi in italiano.`;
+      `REGOLE: solo ###, niente tabelle, somma giorni = ${duration}. Scrivi in italiano.` +
+      logisticaPrompt(departure, dest, transport);
     await callAI(msg, 2000, t => setRevText(t));
     setRevLoad(false);
   }
@@ -703,7 +629,7 @@ export default function PlannerPage() {
         const body = t.replace(/^#+\s*/, '');
         const typeMatch = body.match(/\[(QUARTIERE|CITTA|CITTÀ)\]/i);
         const type = typeMatch ? (typeMatch[1].toUpperCase().includes('QUART') ? 'quartiere' : 'citta') : null;
-        const nm = body.replace(/\[.*?\]/g,'').replace(/\(.*?\)/g,'').replace(/\*\*/g,'').replace(/[:–—|].*/,'').replace(/\s+/g,' ').trim().slice(0,40);
+        const nm = body.replace(/\[.*?\]/g, '').replace(/\(.*\)/, '').trim();
         const dg = body.match(/\((\d+)/);
         cur = { name: nm, days: dg ? parseInt(dg[1]) : null, type };
       }
@@ -724,49 +650,31 @@ export default function PlannerPage() {
   }
 
   async function fetchHotelsForCity(cityName, bdg) {
-    const priceHint = bdg === 'luxury' ? '400-800' : bdg === 'economico' ? '50-90' : '100-200';
-    const starsHint = bdg === 'luxury' ? '5' : bdg === 'economico' ? '2-3' : '3-4';
-    const bookingUrl = `https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}`;
-
-    // 1 hotel alla volta: chiamate piccole (500 token) affidabili su tutti i dispositivi
-    async function fetchOneHotel(position, excludeNames) {
-      const posLabel = position === 0
-        ? 'il MIGLIORE qualita/prezzo (best:true)'
-        : position === 1 ? 'una buona alternativa (best:false)'
-        : 'una terza opzione diversa (best:false)';
-      const exclude = excludeNames.length > 0
-        ? ` NON ripetere questi hotel: ${excludeNames.join(', ')}.` : '';
-      const stars = starsHint.includes('-') ? starsHint.split('-')[1] : starsHint;
-      const msg =
-        `Hotel REALE a ${cityName}, fascia ${bdg}, circa €${priceHint}/notte.` +
-        ` Scegli ${posLabel}.${exclude}` +
-        `\nRispondi SOLO con JSON oggetto (nessun testo):` +
-        `{"name":"Nome Hotel Reale","stars":${stars},"zone":"quartiere","price":"€XXX/notte","why":"motivo","pros":["p1","p2","p3"],"best":${position===0},"url":"${bookingUrl}"}`;
-      const txt = await callAI(msg, 500, null);
-      if (!txt) return null;
-      try {
-        const m = txt.match(/\{[\s\S]*?\}/);
-        if (m) {
-          const obj = JSON.parse(m[0]);
-          if (obj && obj.name && !obj.name.includes('[') && obj.name.length > 3) return obj;
+    const hint = bdg === 'luxury'
+      ? '5 stelle lusso: Four Seasons, Rocco Forte, Belmond. Fascia 400+ eur/notte.'
+      : bdg === 'economico'
+      ? '2-3 stelle o B&B boutique. Fascia 60-120 eur/notte.'
+      : '3-4 stelle: NH Hotels, Starhotels, Marriott Courtyard. Fascia 120-250 eur/notte.';
+    const msg =
+      `Proponi 3 hotel REALI esistenti a ${cityName}, fascia ${bdg} (${hint}).\n` +
+      `Periodo: ${period} ${tripYear || CY}. Viaggiatori: ${trav()}.\n` +
+      `SOLO fascia ${bdg}. Il migliore qualita/prezzo ha best:true.\n` +
+      `Rispondi SOLO con JSON array:\n` +
+      `[{"name":"Nome Hotel","stars":4,"zone":"quartiere","price":"euro150/notte","why":"perche","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
+    const txt = await callAI(msg, 900, null);
+    if (!txt) return null;
+    try {
+      const m = txt.match(/\[[\s\S]*\]/);
+      if (m) {
+        const arr = JSON.parse(m[0]);
+        if (Array.isArray(arr) && arr.length > 0) {
+          if (!arr.some(h => h.best)) arr[0].best = true;
+          return arr;
         }
-      } catch {}
-      return null;
-    }
-
-    const hotels = [];
-    const names = [];
-    for (let i = 0; i < 3; i++) {
-      const h = await fetchOneHotel(i, names);
-      if (h) { hotels.push(h); names.push(h.name); }
-    }
-    if (hotels.length > 0) {
-      if (!hotels.some(h => h.best)) hotels[0].best = true;
-      return hotels;
-    }
+      }
+    } catch {}
     return null;
   }
-
 
   async function genHotels(append) {
     setStep(10); setHotelLoad(true);
@@ -780,17 +688,14 @@ export default function PlannerPage() {
       try {
         const searchCity = cl.isSingleCity ? dest : cl.name;
         let hotels = await fetchHotelsForCity(searchCity, budget);
-        if (!hotels || !Array.isArray(hotels) || hotels.length < 3) {
-          const starsLabel = budget === 'luxury' ? 5 : budget === 'economico' ? 3 : 4;
-          const priceRange = budget === 'luxury' ? '€350-500/notte' : budget === 'economico' ? '€60-100/notte' : '€120-200/notte';
-          const priceRange2 = budget === 'luxury' ? '€280-350/notte' : budget === 'economico' ? '€45-70/notte' : '€90-130/notte';
-          const priceRange3 = budget === 'luxury' ? '€500-800/notte' : budget === 'economico' ? '€80-120/notte' : '€180-280/notte';
-          const baseUrl = `https://www.booking.com/search.html?ss=${encodeURIComponent(searchCity)}${starsQ}`;
-          hotels = [
-            { name: `Hotel ${budget} consigliato a ${searchCity}`, stars: starsLabel, zone: 'centro', price: priceRange, why: `Miglior rapporto qualità/prezzo fascia ${budget} a ${searchCity}`, pros: ['ottima posizione centrale', 'recensioni eccellenti', 'cancellazione gratuita'], best: true, url: baseUrl },
-            { name: `Seconda scelta fascia ${budget} a ${searchCity}`, stars: starsLabel, zone: 'zona centrale', price: priceRange2, why: `Valida alternativa ${budget} a ${searchCity} con ottimo prezzo`, pros: ['prezzi competitivi', 'recensioni positive', 'buona posizione'], best: false, url: baseUrl },
-            { name: `Terza opzione fascia ${budget} a ${searchCity}`, stars: starsLabel, zone: 'centro storico', price: priceRange3, why: `Opzione ${budget} con servizi superiori a ${searchCity}`, pros: ['servizi completi', 'colazione inclusa', 'personale eccellente'], best: false, url: baseUrl },
-          ];
+        if (!hotels || !Array.isArray(hotels) || hotels.length === 0) {
+          hotels = [{
+            name: `Cerca hotel ${budget} a ${searchCity}`, stars: budget === 'luxury' ? 5 : budget === 'economico' ? 3 : 4,
+            zone: 'centro', price: 'vedi Booking',
+            why: `Hotel disponibili a ${searchCity}`,
+            pros: ['prezzi aggiornati', 'recensioni reali', 'cancellazione gratuita'], best: true,
+            url: `https://www.booking.com/search.html?ss=${encodeURIComponent(searchCity)}${starsQ}`,
+          }];
         }
         const existIdx = bases.findIndex(b => b.city === cl.name);
         if (existIdx >= 0) {
@@ -848,45 +753,18 @@ export default function PlannerPage() {
   }
 
   async function genDraft(hotel) {
-    scrollTop();
     setStep(11); setDraftLoad(true); setDraftText('');
     const y = tripYear || detectYear(period);
-    const activeText = (revText || planText).slice(0, 1200);
-    const mobile = isMobile();
-
-    // Su mobile: prompt MINIMO per evitare timeout iOS
-    if (mobile) {
-      const nights = parseDurationToNights(duration) || 4;
-      // Genera solo i giorni senza logistica per stare nei 3000 token
-      const msgGiorni =
-        `Itinerario ${dest} ${nights} giorni, ${style}, budget ${budget}.\n` +
-        `Formato: **Giorno N - Titolo** MATTINA - att1 - att2 POMERIGGIO - att1 - att2 SERA - att1 --- (separa ogni giorno con ---)\n` +
-        `Ogni giorno deve avere MATTINA POMERIGGIO SERA. Scrivi in italiano. Solo i giorni, nient'altro.`;
-      const giorni = await callAI(msgGiorni, 3000, null);
-
-      // Poi genera logistica separata
-      const msgLog =
-        `Logistica per viaggio a ${dest}, ${nights} giorni, budget ${budget}, alloggio ${hotel}.\n` +
-        `Scrivi in italiano:\n## LOGISTICA GENERALE\n- Trasporti: [come spostarsi]\n- Pagamenti: [carta/contanti]\n- App utili: [2-3 app]\n- Prenotazioni: [cosa prenotare]\n- Budget: [stima/giorno a persona]`;
-      const logistica = await callAI(msgLog, 1000, null);
-
-      const full = (giorni || '') + '\n\n' + (logistica || '');
-      if (full.trim().length < 50) {
-        setDraftText('Errore nel caricamento. Premi Rigenera per riprovare.');
-      } else {
-        setDraftText(full);
-      }
-    } else {
-      // Desktop: una sola chiamata grande
-      const msg =
-        `Itinerario bozza per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, alloggio ${hotel}, ${trav()}.\n` +
-        `Piano visite:\n${activeText}\n\n` +
-        `FORMATO per ogni giorno:\n**Giorno 1 - Titolo**\nMATTINA\n- Attivita 1 (durata)\n- Attivita 2 (durata)\nPOMERIGGIO\n- Attivita 1\n- Attivita 2\nSERA\n- Attivita 1\n- Attivita 2\n---\n\n` +
-        `REGOLE: ogni giorno DEVE avere MATTINA POMERIGGIO SERA con 2+ attivita. Ogni giorno separato da ---. Niente tabelle.\n\n` +
-        `## LOGISTICA GENERALE\n- Trasporti: [mezzi]\n- Pagamenti: [carta/contanti]\n- App utili: [2-3 app]\n- Prenotazioni: [cosa prenotare]\n- Budget: [stima/giorno]\n` +
-        `Scrivi in italiano.`;
-      await callAI(msg, 8000, t => setDraftText(t));
-    }
+    const activeText = (revText || planText).slice(0, 1500);
+    const msg =
+      `Itinerario bozza per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, alloggio ${hotel}, ${trav()}.\n` +
+      `Piano visite:\n${activeText}\n\n` +
+      `FORMATO OBBLIGATORIO:\n\n**Giorno 1 - Titolo**\n\nMATTINA\n- Attivita 1 (tempo)\n- Attivita 2 (tempo)\n\nPOMERIGGIO\n- Attivita 1\n\nSERA\n- Attivita 1\n\n---\n\n` +
+      `REGOLE: MATTINA/POMERIGGIO/SERA su riga isolata maiuscolo. Ogni attivita inizia con - su riga separata. Riga vuota tra sezioni.\n\n` +
+      `## LOGISTICA GENERALE\nOGNI punto su riga separata con -:\n- Trasporti: ...\n- Pagamenti: ...\n- App utili: ...\n- Prenotazioni: ...\n- Budget: ...\n` +
+      `Scrivi in italiano.` +
+      logisticaPrompt(departure, dest, transport);
+    await callAI(msg, 8000, t => setDraftText(t));
     setDraftLoad(false);
   }
 
@@ -903,7 +781,6 @@ export default function PlannerPage() {
   }
 
   async function genFinal(f) {
-    scrollTop();
     setStep(15); setFinLoad(true); setFinText('');
     setDImg(imgUrl(dest, 780, 260));
     setGal([imgUrl(`${dest} landscape`), imgUrl(`${dest} food`), imgUrl(`${dest} hotel`)]);
@@ -914,27 +791,25 @@ export default function PlannerPage() {
       : '';
     const transportBlock = (() => {
       const tr = (transport || '').toLowerCase();
-      if (tr.includes('auto'))  return `## TRASPORTO\nViaggio in ${transport} da ${departure} a ${dest}. Percorso, autostrade, soste e parcheggi.\n`;
+      if (tr.includes('auto'))  return `## TRASPORTO\nViaggio in ${transport} da ${departure} a ${dest}. Percorso ottimizzato a goccia: prima le mete piu lontane, poi quelle sulla via del ritorno. Autostrade, soste e parcheggi.\n`;
       if (tr.includes('treno')) return `## TRASPORTO\nViaggio in treno da ${departure} a ${dest}. Trenitalia o Italo: orari, prezzi, stazione.\nLINK https://www.trenitalia.com\n`;
       if (tr.includes('bus'))   return `## TRASPORTO\nViaggio in bus da ${departure} a ${dest}. Compagnie, fermate, orari.\n`;
-      return `## VOLO CONSIGLIATO\nOpzioni di volo da ${departure} a ${dest} per ${period} ${y} (VIETATE tabelle):\n- **Opzione consigliata**: compagnia, scali, durata, fascia prezzo a/r a persona, motivo\n- **Alternativa economica**: compagnia, scali, durata, fascia prezzo\n- **Alternativa diretta**: compagnia, durata, fascia prezzo (se disponibile volo diretto)\nLINK https://www.google.com/travel/flights?q=${encodeURIComponent(`${departure} ${dest}`)}\nLINK https://www.skyscanner.it/voli-per/${encodeURIComponent(dest.toLowerCase())}\n`;
+      return `## VOLO CONSIGLIATO\nRotta ${departure} - ${dest} ${period} ${y}: compagnie, prezzi, miglior opzione.\nLINK https://www.google.com/travel/flights?q=${encodeURIComponent(`${departure} ${dest}`)}\nLINK https://www.skyscanner.it/voli-per/${encodeURIComponent(dest.toLowerCase())}\n`;
     })();
     const formatStr = isMPS
-      ? 'Dividi ogni giorno in tre blocchi. Scrivi MATTINA, POMERIGGIO, SERA in MAIUSCOLO su riga completamente isolata (riga vuota prima e dopo). Elenca attivita come bullet - sotto ogni blocco. MAI scrivere Mattina/Pomeriggio/Sera in fondo a una riga di testo.'
+      ? 'Dividi ogni giorno in tre blocchi: MATTINA / POMERIGGIO / SERA (righe separate maiuscolo). Elenca attivita come bullet - sotto ogni blocco.'
       : `SCHEDULE ORE PER ORA: ogni attivita con orario preciso. Formato:\nGiorno 1 - Titolo\n07:00 - Partenza da ${departure}\n09:30 - Arrivo e check-in\n10:00 - Visita sito X (durata: 1.5 ore)\nOgni riga deve avere ORARIO - ATTIVITA. Includi tempi di spostamento, mezzi, durate.`;
     const msg =
       `Itinerario completo per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, ${trav()}, partenza ${departure}, alloggio ${selStr}.\n` +
-      `Formato giorni: ${formatStr}. Separa giorni con ---. VIETATE TABELLE MARKDOWN (niente pipe |). Scrivi in italiano con ## per sezioni:\n` +
+      `Formato giorni: ${formatStr}. Separa giorni con ---. Scrivi in italiano con ## per sezioni:\n` +
       `## PRESENTAZIONE DELLA DESTINAZIONE\n` +
       transportBlock +
-      `## ALLOGGIO\nPer ogni citta/area selezionata, scrivi su righe separate:\n**[Nome Citta]** → [Nome Hotel scelto]\nLINK [url booking diretto dell'hotel]\n[Descrizione 1-2 righe: zona, caratteristiche, perche ottimale per l'itinerario]\n\nAlloggi selezionati: ${selStr}\nLINK https://www.booking.com/search.html?ss=${encodeURIComponent(dest)}\n` +
-      `## ITINERARIO GIORNO PER GIORNO\nSEGUI ESATTAMENTE questa bozza approvata aggiungendo solo dettagli e link (NON omettere giorni):\n${draftText.slice(0, 4000)}\n\nPer ogni attivita aggiungi: LINK url-biglietti${wantsFood ? ' e LINK url-ristorante' : ''}\n` +
+      `## ALLOGGIO\n${selStr}: zona e perche ottimale\nLINK https://www.booking.com/search.html?ss=${encodeURIComponent(dest)}\n` +
+      `## ITINERARIO GIORNO PER GIORNO\nSEGUI ESATTAMENTE questa bozza approvata aggiungendo solo dettagli e link:\n${draftText.slice(0, 2500)}\n\nPer ogni attivita aggiungi: LINK url-biglietti${wantsFood ? ' e LINK url-ristorante' : ''}\n` +
       gdStr +
       `## ESPERIENZE LOCALI E CUCINA\n3-4 con LINK url\n` +
       `## CONSIGLI PRATICI\n- Trasporti\n- Pagamenti\n- App utili\n- Visto\n- Valigia`;
-    // Sia mobile che desktop usano streaming — differenza solo nel token limit
-    const tokenLimit = isMobile() ? 8000 : 12000;
-    try { await callAI(msg, tokenLimit, t => setFinText(t)); }
+    try { await callAI(msg, 8000, t => setFinText(t)); }
     catch (e) { setFinText(`Errore: ${e.message}`); }
     setFinLoad(false);
   }
@@ -1328,10 +1203,7 @@ export default function PlannerPage() {
             <Badge text="📋 Bozza itinerario" />
             <div className="p-tt">Prima bozza</div>
             <div className="p-ht">Ottimizzato per il tuo alloggio</div>
-            {draftLoad && draftText
-        ? <div className="p-aib" style={{whiteSpace:'pre-wrap',fontSize:13,color:'#ccc',lineHeight:1.8}}>{draftText}<span className='p-cur'/></div>
-        : <ABox text={draftText} loading={draftLoad} lt="Ottimizzo gli spostamenti..." />
-      }
+            <ABox text={draftText} loading={draftLoad} lt="Ottimizzo gli spostamenti..." />
             {!draftLoad && draftText && (
               <div>
                 <div style={{ fontSize:13, color:'#888', margin:'1rem 0 .8rem' }}>Come trovi questa bozza?</div>
@@ -1350,7 +1222,7 @@ export default function PlannerPage() {
             <Badge text={`🧭 Guide · ${dest}`} />
             <div className="p-tt">Vuoi una guida turistica?</div>
             <div className="p-ht">Guide locali certificate lungo il percorso</div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, alignItems:'start' }} className="guide-grid">
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, alignItems:'start' }}>
               <div>
                 {guide === null && (
                   <div className="p-yn">
@@ -1442,9 +1314,7 @@ export default function PlannerPage() {
             <div className="p-rbody">
               {finLoad && !finText && <Dots text="Genero l'itinerario definitivo..." />}
               {finText && (
-                finLoad
-                  ? <div className="p-rtxt" ref={finRef} style={{whiteSpace:'pre-wrap'}}>{finText}<span className='p-cur'/></div>
-                  : <div className="p-rtxt" ref={finRef} dangerouslySetInnerHTML={{ __html: mdHtml(finText) }} />
+                <div className="p-rtxt" ref={finRef} dangerouslySetInnerHTML={{ __html: mdHtml(finText) + (finLoad ? "<span class='p-cur'></span>" : '') }} />
               )}
               {!finLoad && finText && (
                 <div>

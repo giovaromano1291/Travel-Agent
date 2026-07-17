@@ -1,5 +1,5 @@
 // api/chat.js — Vercel Edge Function
-// Usa SEMPRE streaming SSE per evitare timeout (limite 25s piano Hobby)
+// Streaming SSE sempre attivo per evitare timeout (piano Hobby: limite 25s)
 
 export const config = { runtime: 'edge' };
 
@@ -27,7 +27,7 @@ export default async function handler(req) {
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
       max_tokens: maxTokens,
-      stream: true, // SEMPRE streaming per evitare timeout Edge Function
+      stream: true,
       messages: [{ role: 'user', content: message }],
     }),
   });
@@ -40,7 +40,6 @@ export default async function handler(req) {
     });
   }
 
-  // Passthrough dello stream SSE direttamente al client
   return new Response(anthropicRes.body, {
     status: 200,
     headers: {

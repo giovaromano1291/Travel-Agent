@@ -128,11 +128,11 @@ function mdHtml(t) {
         .replace(/QUARTIERE/i, 'quartiere')
         .toLowerCase();
       const badge = label ? `<span style='font-size:10px;color:${G};background:#1a1400;border:.5px solid ${G};border-radius:10px;padding:2px 8px;margin-left:8px;font-family:Inter,sans-serif;font-weight:500'>${labelNorm}</span>` : '';
-      return `<div style='display:flex;align-items:center;gap:6px;margin:1.6rem 0 0.8rem;padding:10px 14px;background:linear-gradient(90deg,#1a1400,transparent);border-left:3px solid ${G};border-radius:0 8px 8px 0'><span style='font-family:Cormorant Garamond,serif;font-size:16px;font-weight:600;color:${GL}'>${name}</span>${badge}</div>`;
+      return `<div style='display:flex;align-items:center;gap:6px;margin:1.8rem 0 0.8rem;padding:12px 16px;background:linear-gradient(90deg,#1a1400,transparent);border-left:4px solid ${G};border-radius:0 8px 8px 0'><span style='font-family:Cormorant Garamond,serif;font-size:18px;font-weight:700;color:${GL};letter-spacing:0.5px'>${name}</span>${badge}</div>`;
     })
     .replace(/^## (.+)$/gm, (_, sec) => {
       const isLog = /LOGISTICA/i.test(sec);
-      return `<div style='font-size:11px;letter-spacing:2px;color:${G};text-transform:uppercase;${isLog ? 'margin:2.5rem 0 0.8rem;border-top:2px solid ' + G + ';padding-top:1.4rem;' : 'margin:1.4rem 0 0.6rem;border-top:0.5px solid #2a2a2a;padding-top:1rem;'}font-weight:600'>${sec}</div>`;
+      return `<div style='font-size:11px;letter-spacing:2px;color:${G};text-transform:uppercase;${isLog ? 'margin:3rem 0 1rem;border-top:2px solid ' + G + ';padding-top:1.6rem;' : 'margin:1.4rem 0 0.6rem;border-top:0.5px solid #2a2a2a;padding-top:1rem;'}font-weight:600'>${sec}</div>`;
     })
     .replace(/^(Giorno \d+(?:(?!MATTINA|POMERIGGIO|SERA).)+)$/gm, `<div style='color:${GL};font-weight:700;margin-top:1.8rem;font-size:15px;border-top:0.5px solid #2a2a2a;padding-top:1.2rem;display:block'>$1</div>`)
     .replace(/^MATTINA$/gm,    `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Mattina</span></div>`)
@@ -146,6 +146,10 @@ function mdHtml(t) {
       const lb = p1.replace(/^([A-Za-z\u00c0-\u00ff\s]+:)\s*/, `<strong style='color:${GL};font-weight:600'>$1</strong> `);
       return `<div style='display:flex;align-items:flex-start;gap:8px;margin:0.35rem 0;color:#ccc;font-size:13px;line-height:1.6'><span style='color:${G};flex-shrink:0'>◆</span><span>${lb}</span></div>`;
     });
+}
+
+function scrollTop() {
+  try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch(e) { window.scrollTo(0, 0); }
 }
 
 function isMobile() {
@@ -626,6 +630,7 @@ export default function PlannerPage() {
   }
 
   async function genPlan(dep) {
+    scrollTop();
     setStep(8); setPlanLoad(true); setPlanText('');
     const y = detectYear(period); setTripYear(y);
     checkDistance(dep, dest);
@@ -633,7 +638,7 @@ export default function PlannerPage() {
       `Crea un piano visivo dell'itinerario per: ${dest}, ${period} ${y}, ${duration}${duration.includes('Weekend') ? ' (solo 2-3 giorni, max 2 destinazioni vicine)' : ''}, ${style}, ${trav()}, budget ${budget}.\n\n` +
       `REGOLA CRITICA SUL TIPO:\n- Usa [QUARTIERE] se ${dest} e una SINGOLA CITTA\n- Usa [CITTA] SOLO se l'itinerario tocca piu CITTA DIVERSE\n- Quartieri, arrondissement, zone di una stessa citta = SEMPRE [QUARTIERE]\n\n` +
       `FORMATO OBBLIGATORIO per ogni blocco:\n### NOME (N giorni) [TIPO]\n- **Cosa vedere**: luogo - perche\n- **Cosa fare**: attivita - descrizione\n- **Da non perdere**: esperienza - perche\n\n` +
-      `REGOLE:\n1. Solo ### per i titoli\n2. Niente tabelle\n3. Inizia subito col primo ###\n4. La somma dei giorni deve corrispondere a: ${duration}\n5. Scrivi in italiano\n\n` +
+      `REGOLE:\n1. Solo ### per i titoli in MAIUSCOLO\n2. Niente tabelle\n3. Inizia SUBITO con il primo ### senza testo introduttivo\n4. La somma dei giorni deve corrispondere a: ${duration}\n5. Scrivi in italiano\n\n` +
       `ESEMPIO singola citta (Parigi, 5gg):\n### LOUVRE & MARAIS (2 giorni) [QUARTIERE]\n- **Cosa vedere**: Museo del Louvre\n### MONTMARTRE (1 giorno) [QUARTIERE]\n### EIFFEL & SAINT-GERMAIN (2 giorni) [QUARTIERE]\n\n` +
       `ESEMPIO piu citta (Costa Azzurra, 7gg):\n### NIZZA (3 giorni) [CITTA]\n### MONACO (2 giorni) [CITTA]\n### CANNES (2 giorni) [CITTA]`;
     await callAI(msg, 1800, t => setPlanText(t));
@@ -641,6 +646,7 @@ export default function PlannerPage() {
   }
 
   async function genRevised() {
+    scrollTop();
     setStep(9); setRevLoad(true); setRevText(''); setMods('');
     const y = tripYear || detectYear(period);
     const msg =
@@ -807,6 +813,7 @@ export default function PlannerPage() {
   }
 
   async function genDraft(hotel) {
+    scrollTop();
     setStep(11); setDraftLoad(true); setDraftText('');
     const y = tripYear || detectYear(period);
     const activeText = (revText || planText).slice(0, 1200);
@@ -861,6 +868,7 @@ export default function PlannerPage() {
   }
 
   async function genFinal(f) {
+    scrollTop();
     setStep(15); setFinLoad(true); setFinText('');
     setDImg(imgUrl(dest, 780, 260));
     setGal([imgUrl(`${dest} landscape`), imgUrl(`${dest} food`), imgUrl(`${dest} hotel`)]);
@@ -885,55 +893,28 @@ export default function PlannerPage() {
       `## PRESENTAZIONE DELLA DESTINAZIONE\n` +
       transportBlock +
       `## ALLOGGIO\nPer ogni citta/area selezionata, scrivi su righe separate:\n**[Nome Citta]** → [Nome Hotel scelto]\nLINK [url booking diretto dell'hotel]\n[Descrizione 1-2 righe: zona, caratteristiche, perche ottimale per l'itinerario]\n\nAlloggi selezionati: ${selStr}\nLINK https://www.booking.com/search.html?ss=${encodeURIComponent(dest)}\n` +
-      `## ITINERARIO GIORNO PER GIORNO\nSEGUI ESATTAMENTE questa bozza approvata aggiungendo solo dettagli e link:\n${draftText.slice(0, 2500)}\n\nPer ogni attivita aggiungi: LINK url-biglietti${wantsFood ? ' e LINK url-ristorante' : ''}\n` +
+      `## ITINERARIO GIORNO PER GIORNO\nSEGUI ESATTAMENTE questa bozza approvata aggiungendo solo dettagli e link (NON omettere giorni):\n${draftText.slice(0, 4000)}\n\nPer ogni attivita aggiungi: LINK url-biglietti${wantsFood ? ' e LINK url-ristorante' : ''}\n` +
       gdStr +
       `## ESPERIENZE LOCALI E CUCINA\n3-4 con LINK url\n` +
       `## CONSIGLI PRATICI\n- Trasporti\n- Pagamenti\n- App utili\n- Visto\n- Valigia`;
     if (isMobile()) {
       // Mobile: 3 chiamate separate per evitare timeout
       try {
-        // Parte 1: presentazione + trasporto + alloggio
-        const msg1 =
-          `Per ${dest}, ${period} ${y}, ${style}, budget ${budget}, ${trav()}, da ${departure}. Scrivi in italiano:
-` +
-          `## PRESENTAZIONE DELLA DESTINAZIONE
-Descrivi in 3-4 frasi evocative. NON includere voli qui.
-` +
+        const n = '\n';
+        const msg1 = `Per ${dest}, ${period} ${y}, ${style}, budget ${budget}, ${trav()}, da ${departure}. Scrivi in italiano:${n}` +
+          `## PRESENTAZIONE DELLA DESTINAZIONE${n}Descrivi in 3-4 frasi evocative. NON includere voli qui.${n}` +
           transportBlock +
-          `## ALLOGGIO
-Per ogni citta/area: **[Citta]** → [Nome Hotel]
-LINK [url booking]
-[Descrizione breve]
-Alloggi: ${selStr}
-`;
+          `## ALLOGGIO${n}Per ogni citta/area: **[Citta]** → [Nome Hotel]${n}LINK [url booking]${n}[Descrizione breve]${n}Alloggi: ${selStr}${n}`;
         const p1 = await callAI(msg1, 2000, null);
 
-        // Parte 2: itinerario giorno per giorno
-        const msg2 =
-          `Itinerario ${dest}, ${duration}, ${style}, budget ${budget}, ${trav()}, alloggio ${selStr}.
-` +
-          `${formatStr}. Separa giorni con ---. VIETATE tabelle markdown.
-` +
-          `## ITINERARIO GIORNO PER GIORNO
-SEGUI questa bozza aggiungendo dettagli e LINK url-biglietti:
-${draftText.slice(0, 2000)}
-`;
+        const msg2 = `Itinerario ${dest}, ${duration}, ${style}, budget ${budget}, ${trav()}, alloggio ${selStr}.${n}` +
+          `${formatStr}. Separa giorni con ---. VIETATE tabelle markdown.${n}` +
+          `## ITINERARIO GIORNO PER GIORNO${n}SEGUI questa bozza aggiungendo dettagli e LINK url-biglietti:${n}${draftText.slice(0, 2000)}${n}`;
         const p2 = await callAI(msg2, 5000, null);
 
-        // Parte 3: esperienze + consigli pratici
-        const msg3 =
-          `Per viaggio a ${dest}, ${period} ${y}, ${style}, budget ${budget}. Scrivi in italiano:
-` +
-          `## ESPERIENZE LOCALI E CUCINA
-3-4 esperienze con LINK url
-` +
-          `## CONSIGLI PRATICI
-- Trasporti: [dettagli]
-- Pagamenti: [dettagli]
-- App utili: [2-3 app]
-- Visto: [necessario?]
-- Valigia: [cosa portare]
-`;
+        const msg3 = `Per viaggio a ${dest}, ${period} ${y}, ${style}, budget ${budget}. Scrivi in italiano:${n}` +
+          `## ESPERIENZE LOCALI E CUCINA${n}3-4 esperienze con LINK url${n}` +
+          `## CONSIGLI PRATICI${n}- Trasporti: [dettagli]${n}- Pagamenti: [dettagli]${n}- App utili: [2-3 app]${n}- Visto: [necessario?]${n}- Valigia: [cosa portare]${n}`;
         const p3 = await callAI(msg3, 1500, null);
 
         const full = [p1, p2, p3].filter(Boolean).join('\n\n');
@@ -945,7 +926,7 @@ ${draftText.slice(0, 2000)}
       } catch (e) { setFinText(`Errore: ${e.message}`); }
     } else {
       // Desktop: chiamata unica con streaming
-      try { await callAI(msg, 8000, t => setFinText(t)); }
+      try { await callAI(msg, 12000, t => setFinText(t)); }
       catch (e) { setFinText(`Errore: ${e.message}`); }
     }
     setFinLoad(false);

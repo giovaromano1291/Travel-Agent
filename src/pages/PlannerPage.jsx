@@ -61,7 +61,8 @@ function parseDurationToNights(d) {
 function mdHtml(t) {
   t = t.replace(/\r/g, '');
   // Rimuovi marcatori heading rimasti come testo grezzo, ma mantieni il contenuto
-  t = t.replace(/^#{1,3}\s+(.*)$/gm, '$1');
+  // Rimuovi ### solo se seguiti da spazio (heading veri), non testo troncato
+  t = t.replace(/^(#{1,3})\s+(.*)$/gm, '$2');
   // Spezza "**Giorno N...**" dal testo che segue sulla stessa riga
   // Es: "**Giorno 2 – Titolo** testo mattina" → "**Giorno 2 – Titolo**\ntesto mattina"
   t = t.replace(/(\*\*Giorno\s+\d+[^*]*\*\*)\s+([^*\n])/g, '$1\n$2');
@@ -178,17 +179,30 @@ async function callAI(userMsg, maxTok = 1000, onChunk) {
     if (!res.ok) return '';
 
     if (mobile) {
-      // Su mobile: usa streaming SSE come desktop ma con gestione errori
-      // Non-streaming causa timeout sulla Edge Function Vercel (limite 25s)
+      // Mobile: streaming SSE con fallback per Safari iOS
+      // Safari a volte non supporta ReadableStream.getReader() correttamente
       try {
+        if (!res.body || typeof res.body.getReader !== 'function') {
+          // Fallback Safari: leggi tutta la risposta come testo SSE
+          const text = await res.text();
+          let full = '';
+          for (const line of text.split('\n')) {
+            if (line.startsWith('data: ')) {
+              try {
+                const jj = JSON.parse(line.slice(6));
+                if (jj.delta?.text) full += jj.delta.text;
+              } catch {}
+            }
+          }
+          if (full && onChunk) onChunk(full);
+          return full;
+        }
         const reader = res.body.getReader();
         const dc = new TextDecoder();
         let full = '';
-        let lastChunkTime = Date.now();
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          lastChunkTime = Date.now();
           for (const line of dc.decode(value).split('\n')) {
             if (line.startsWith('data: ')) {
               try {
@@ -394,7 +408,9 @@ function ABox({ text, loading, lt, style: extraStyle }) {
     <div className="p-aib" style={extraStyle}>
       {loading && !text
         ? <Dots text={lt || 'Elaboro...'} />
-        : <div dangerouslySetInnerHTML={{ __html: mdHtml(text || '') + (loading ? "<span class='p-cur'></span>" : '') }} />
+        : loading && text
+        ? <div style={{whiteSpace:'pre-wrap',fontSize:13,color:'#ccc',lineHeight:1.8}}>{text}<span className='p-cur'/></div>
+        : <div dangerouslySetInnerHTML={{ __html: mdHtml(text || '') }} />
       }
     </div>
   );
@@ -1312,7 +1328,10 @@ export default function PlannerPage() {
             <Badge text="📋 Bozza itinerario" />
             <div className="p-tt">Prima bozza</div>
             <div className="p-ht">Ottimizzato per il tuo alloggio</div>
-            <ABox text={draftText} loading={draftLoad} lt="Ottimizzo gli spostamenti..." />
+            {draftLoad && draftText
+        ? <div className="p-aib" style={{whiteSpace:'pre-wrap',fontSize:13,color:'#ccc',lineHeight:1.8}}>{draftText}<span className='p-cur'/></div>
+        : <ABox text={draftText} loading={draftLoad} lt="Ottimizzo gli spostamenti..." />
+      }
             {!draftLoad && draftText && (
               <div>
                 <div style={{ fontSize:13, color:'#888', margin:'1rem 0 .8rem' }}>Come trovi questa bozza?</div>
@@ -1423,7 +1442,9 @@ export default function PlannerPage() {
             <div className="p-rbody">
               {finLoad && !finText && <Dots text="Genero l'itinerario definitivo..." />}
               {finText && (
-                <div className="p-rtxt" ref={finRef} dangerouslySetInnerHTML={{ __html: mdHtml(finText) + (finLoad ? "<span class='p-cur'></span>" : '') }} />
+                finLoad
+                  ? <div className="p-rtxt" ref={finRef} style={{whiteSpace:'pre-wrap'}}>{finText}<span className='p-cur'/></div>
+                  : <div className="p-rtxt" ref={finRef} dangerouslySetInnerHTML={{ __html: mdHtml(finText) }} />
               )}
               {!finLoad && finText && (
                 <div>

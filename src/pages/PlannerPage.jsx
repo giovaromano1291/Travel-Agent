@@ -89,6 +89,14 @@ function mdHtml(t) {
   t = t.replace(/([.!?])\s+(Trasporti|Pagamenti|App utili|Prenotazioni|Budget|App|Visto|Valigia):/g, '$1\n- $2:');
   // Forza newline dopo ## LOGISTICA GENERALE se seguito da testo sulla stessa riga
   t = t.replace(/(LOGISTICA GENERALE)\s+(Trasporti|Pagamenti)/g, '$1\n- $2');
+  // Spezza App utili discorsive in bullet separati
+  // Es: "- App utili: Grab – taxi | Google Maps – nav" → bullet separati
+  t = t.replace(/^([-*]\s*App utili:?\s*)(.+)$/gm, (_, prefix, apps) => {
+    // Divide per separatori comuni: " | ", " — ", " – ", "; "
+    const items = apps.split(/\s*[|;]\s*|\s*[–—]\s*(?=[A-Z])/);
+    if (items.length <= 1) return prefix + apps;
+    return prefix + items[0] + '\n' + items.slice(1).map(a => '- ' + a.trim()).join('\n');
+  });
   // Spezza "Budget Stimato" e nota finale su riga separata
   t = t.replace(/([^\n])(Budget Stimato|Nota su |💡)/g, '$1\n$2');
   // ── Rimuovi tabelle markdown ────────────────────────────────
@@ -122,7 +130,10 @@ function mdHtml(t) {
       const badge = label ? `<span style='font-size:10px;color:${G};background:#1a1400;border:.5px solid ${G};border-radius:10px;padding:2px 8px;margin-left:8px;font-family:Inter,sans-serif;font-weight:500'>${labelNorm}</span>` : '';
       return `<div style='display:flex;align-items:center;gap:6px;margin:1.6rem 0 0.8rem;padding:10px 14px;background:linear-gradient(90deg,#1a1400,transparent);border-left:3px solid ${G};border-radius:0 8px 8px 0'><span style='font-family:Cormorant Garamond,serif;font-size:16px;font-weight:600;color:${GL}'>${name}</span>${badge}</div>`;
     })
-    .replace(/^## (.+)$/gm, `<div style='font-size:11px;letter-spacing:2px;color:${G};text-transform:uppercase;margin:1.4rem 0 0.6rem;border-top:0.5px solid #2a2a2a;padding-top:1rem;font-weight:600'>$1</div>`)
+    .replace(/^## (.+)$/gm, (_, sec) => {
+      const isLog = /LOGISTICA/i.test(sec);
+      return `<div style='font-size:11px;letter-spacing:2px;color:${G};text-transform:uppercase;${isLog ? 'margin:2.5rem 0 0.8rem;border-top:2px solid ' + G + ';padding-top:1.4rem;' : 'margin:1.4rem 0 0.6rem;border-top:0.5px solid #2a2a2a;padding-top:1rem;'}font-weight:600'>${sec}</div>`;
+    })
     .replace(/^(Giorno \d+(?:(?!MATTINA|POMERIGGIO|SERA).)+)$/gm, `<div style='color:${GL};font-weight:700;margin-top:1.8rem;font-size:15px;border-top:0.5px solid #2a2a2a;padding-top:1.2rem;display:block'>$1</div>`)
     .replace(/^MATTINA$/gm,    `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Mattina</span></div>`)
     .replace(/^POMERIGGIO$/gm, `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1.2rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Pomeriggio</span></div>`)
@@ -907,7 +918,7 @@ Alloggi: ${selStr}
 SEGUI questa bozza aggiungendo dettagli e LINK url-biglietti:
 ${draftText.slice(0, 2000)}
 `;
-        const p2 = await callAI(msg2, 4000, null);
+        const p2 = await callAI(msg2, 5000, null);
 
         // Parte 3: esperienze + consigli pratici
         const msg3 =
@@ -926,7 +937,7 @@ ${draftText.slice(0, 2000)}
         const p3 = await callAI(msg3, 1500, null);
 
         const full = [p1, p2, p3].filter(Boolean).join('\n\n');
-        if (full.trim().length < 100) {
+        if (full.trim().length < 20) {
           setFinText('Errore nel caricamento. Torna indietro e riprova.');
         } else {
           setFinText(full);

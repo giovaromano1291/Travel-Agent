@@ -91,6 +91,21 @@ function mdHtml(t) {
   t = t.replace(/(LOGISTICA GENERALE)\s+(Trasporti|Pagamenti)/g, '$1\n- $2');
   // Spezza "Budget Stimato" e nota finale su riga separata
   t = t.replace(/([^\n])(Budget Stimato|Nota su |💡)/g, '$1\n$2');
+  // ── Rimuovi tabelle markdown ────────────────────────────────
+  // 1. Righe separatore |---|---|
+  t = t.replace(/^[\s|]*[-|]{3,}[\s|]*$/gm, '');
+  // 2. Righe con pipe che formano tabelle
+  t = t.replace(/^\|(.+)\|\s*$/gm, (_, inner) =>
+    inner.split('|').map(s => s.trim()).filter(Boolean).join(' — ')
+  );
+  // 3. Pipe isolati nel testo "App | Funzione | |------|"
+  t = t.replace(/\s*\|\s*-{3,}[\s|]*/g, ' ');
+  // 4. Righe tipo "voce | valore | valore" non gestite sopra
+  t = t.replace(/^([^\n*#`>]+\|[^\n]+)$/gm, (m) => {
+    if (m.includes('---')) return '';
+    return m.split('|').map(s => s.trim()).filter(Boolean).join(' — ');
+  });
+  // ────────────────────────────────────────────────────────────
   t = t.replace(/\n{3,}/g, '\n\n');
   return t
     .replace(/\*\*(.*?)\*\*/g, `<strong style='color:${GL};font-weight:500'>$1</strong>`)
@@ -855,7 +870,7 @@ export default function PlannerPage() {
       : `SCHEDULE ORE PER ORA: ogni attivita con orario preciso. Formato:\nGiorno 1 - Titolo\n07:00 - Partenza da ${departure}\n09:30 - Arrivo e check-in\n10:00 - Visita sito X (durata: 1.5 ore)\nOgni riga deve avere ORARIO - ATTIVITA. Includi tempi di spostamento, mezzi, durate.`;
     const msg =
       `Itinerario completo per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, ${trav()}, partenza ${departure}, alloggio ${selStr}.\n` +
-      `Formato giorni: ${formatStr}. Separa giorni con ---. Scrivi in italiano con ## per sezioni:\n` +
+      `Formato giorni: ${formatStr}. Separa giorni con ---. VIETATE TABELLE MARKDOWN (niente pipe |). Scrivi in italiano con ## per sezioni:\n` +
       `## PRESENTAZIONE DELLA DESTINAZIONE\n` +
       transportBlock +
       `## ALLOGGIO\nPer ogni citta/area selezionata, scrivi su righe separate:\n**[Nome Citta]** → [Nome Hotel scelto]\nLINK [url booking diretto dell'hotel]\n[Descrizione 1-2 righe: zona, caratteristiche, perche ottimale per l'itinerario]\n\nAlloggi selezionati: ${selStr}\nLINK https://www.booking.com/search.html?ss=${encodeURIComponent(dest)}\n` +
@@ -863,8 +878,67 @@ export default function PlannerPage() {
       gdStr +
       `## ESPERIENZE LOCALI E CUCINA\n3-4 con LINK url\n` +
       `## CONSIGLI PRATICI\n- Trasporti\n- Pagamenti\n- App utili\n- Visto\n- Valigia`;
-    try { await callAI(msg, 8000, t => setFinText(t)); }
-    catch (e) { setFinText(`Errore: ${e.message}`); }
+    if (isMobile()) {
+      // Mobile: 3 chiamate separate per evitare timeout
+      try {
+        // Parte 1: presentazione + trasporto + alloggio
+        const msg1 =
+          `Per ${dest}, ${period} ${y}, ${style}, budget ${budget}, ${trav()}, da ${departure}. Scrivi in italiano:
+` +
+          `## PRESENTAZIONE DELLA DESTINAZIONE
+Descrivi in 3-4 frasi evocative. NON includere voli qui.
+` +
+          transportBlock +
+          `## ALLOGGIO
+Per ogni citta/area: **[Citta]** → [Nome Hotel]
+LINK [url booking]
+[Descrizione breve]
+Alloggi: ${selStr}
+`;
+        const p1 = await callAI(msg1, 2000, null);
+
+        // Parte 2: itinerario giorno per giorno
+        const msg2 =
+          `Itinerario ${dest}, ${duration}, ${style}, budget ${budget}, ${trav()}, alloggio ${selStr}.
+` +
+          `${formatStr}. Separa giorni con ---. VIETATE tabelle markdown.
+` +
+          `## ITINERARIO GIORNO PER GIORNO
+SEGUI questa bozza aggiungendo dettagli e LINK url-biglietti:
+${draftText.slice(0, 2000)}
+`;
+        const p2 = await callAI(msg2, 4000, null);
+
+        // Parte 3: esperienze + consigli pratici
+        const msg3 =
+          `Per viaggio a ${dest}, ${period} ${y}, ${style}, budget ${budget}. Scrivi in italiano:
+` +
+          `## ESPERIENZE LOCALI E CUCINA
+3-4 esperienze con LINK url
+` +
+          `## CONSIGLI PRATICI
+- Trasporti: [dettagli]
+- Pagamenti: [dettagli]
+- App utili: [2-3 app]
+- Visto: [necessario?]
+- Valigia: [cosa portare]
+`;
+        const p3 = await callAI(msg3, 1500, null);
+
+        const full = [p1, p2, p3].filter(Boolean).join('
+
+');
+        if (full.trim().length < 100) {
+          setFinText('Errore nel caricamento. Torna indietro e riprova.');
+        } else {
+          setFinText(full);
+        }
+      } catch (e) { setFinText(`Errore: ${e.message}`); }
+    } else {
+      // Desktop: chiamata unica con streaming
+      try { await callAI(msg, 8000, t => setFinText(t)); }
+      catch (e) { setFinText(`Errore: ${e.message}`); }
+    }
     setFinLoad(false);
   }
 

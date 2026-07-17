@@ -925,9 +925,7 @@ ${draftText.slice(0, 2000)}
 `;
         const p3 = await callAI(msg3, 1500, null);
 
-        const full = [p1, p2, p3].filter(Boolean).join('
-
-');
+        const full = [p1, p2, p3].filter(Boolean).join('\n\n');
         if (full.trim().length < 100) {
           setFinText('Errore nel caricamento. Torna indietro e riprova.');
         } else {

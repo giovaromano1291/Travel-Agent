@@ -67,26 +67,34 @@ function mdHtml(t) {
   t = t.replace(/(\*\*Giorno\s+\d+[^*]*\*\*)\s+([^*\n])/g, '$1\n$2');
   // Spezza "Giorno N – Titolo: testo" dove il titolo è seguito da attività
   t = t.replace(/^(\*{0,2}Giorno\s+\d+[^\n]+?)(\s+[-◆•]\s)/gm, '$1\n$2');
-  const MPS = ['Mattina','MATTINA','Pomeriggio','POMERIGGIO','Sera','SERA'];
+  // Normalizza TUTTE le varianti di Mattina/Pomeriggio/Sera
+  // **Mattina**, Mattina:, mattina, MATTINA → MATTINA su riga isolata
+  t = t.replace(/\*\*(Mattina|Pomeriggio|Sera)\*\*:?/gi, (_, m) => m.toUpperCase());
+  t = t.replace(/^(Mattina|Pomeriggio|Sera):?\s*$/gmi, m => m.trim().replace(/:$/, '').toUpperCase());
+  // Se Mattina/Pomeriggio/Sera è in fondo a una riga, spezza
+  t = t.replace(/([^\n]+)\s+(MATTINA|POMERIGGIO|SERA)$/gm, '$1\n$2');
+  // Se Giorno N è seguito da Mattina sulla stessa riga, spezza
+  t = t.replace(/(Giorno\s+\d+[^\n]+?)\s+(MATTINA|POMERIGGIO|SERA)/g, '$1\n$2');
   const lns = t.split('\n');
   const out = [];
   for (let i = 0; i < lns.length; i++) {
     const ln = lns[i];
-    let found = false;
-    for (const tag of MPS) {
-      if (ln.length > tag.length && ln.slice(-tag.length) === tag && ln.slice(-tag.length - 1, -tag.length) === ' ') {
-        const before = ln.slice(0, ln.length - tag.length - 1).trim();
-        if (before.length > 0) { out.push(before); out.push(''); out.push(tag.toUpperCase()); found = true; break; }
-      }
-    }
-    if (!found) {
-      const tr = ln.trim();
-      out.push(tr === 'Mattina' || tr === 'Pomeriggio' || tr === 'Sera' ? tr.toUpperCase() : ln);
+    const tr = ln.trim();
+    // Riconosci tutte le varianti MPS su riga isolata
+    if (/^(MATTINA|POMERIGGIO|SERA)$/i.test(tr)) {
+      out.push(tr.toUpperCase());
+    } else {
+      out.push(ln);
     }
   }
   t = out.join('\n');
   t = t.replace(/\.[ \t]+-[ \t]+/g, '.\n- ');
   t = t.replace(/([.!?])\s+(Trasporti|Pagamenti|App utili|Prenotazioni|Budget|App|Visto|Valigia):/g, '$1\n- $2:');
+  // Normalizza LOGISTICA GENERALE: assicura che abbia sempre ##
+  t = t.replace(/^(LOGISTICA GENERALE[^\n]*)$/gm, (m) => {
+    if (!m.startsWith('##')) return '## ' + m;
+    return m;
+  });
   // Forza newline dopo ## LOGISTICA GENERALE se seguito da testo sulla stessa riga
   t = t.replace(/(LOGISTICA GENERALE)\s+(Trasporti|Pagamenti)/g, '$1\n- $2');
   // Spezza App utili discorsive in bullet separati
@@ -896,7 +904,7 @@ export default function PlannerPage() {
       return `## VOLO CONSIGLIATO\nOpzioni di volo da ${departure} a ${dest} per ${period} ${y} (VIETATE tabelle):\n- **Opzione consigliata**: compagnia, scali, durata, fascia prezzo a/r a persona, motivo\n- **Alternativa economica**: compagnia, scali, durata, fascia prezzo\n- **Alternativa diretta**: compagnia, durata, fascia prezzo (se disponibile volo diretto)\nLINK https://www.google.com/travel/flights?q=${encodeURIComponent(`${departure} ${dest}`)}\nLINK https://www.skyscanner.it/voli-per/${encodeURIComponent(dest.toLowerCase())}\n`;
     })();
     const formatStr = isMPS
-      ? 'Dividi ogni giorno in tre blocchi: MATTINA / POMERIGGIO / SERA (righe separate maiuscolo). Elenca attivita come bullet - sotto ogni blocco.'
+      ? 'Dividi ogni giorno in tre blocchi. Scrivi MATTINA, POMERIGGIO, SERA in MAIUSCOLO su riga completamente isolata (riga vuota prima e dopo). Elenca attivita come bullet - sotto ogni blocco. MAI scrivere Mattina/Pomeriggio/Sera in fondo a una riga di testo.'
       : `SCHEDULE ORE PER ORA: ogni attivita con orario preciso. Formato:\nGiorno 1 - Titolo\n07:00 - Partenza da ${departure}\n09:30 - Arrivo e check-in\n10:00 - Visita sito X (durata: 1.5 ore)\nOgni riga deve avere ORARIO - ATTIVITA. Includi tempi di spostamento, mezzi, durate.`;
     const msg =
       `Itinerario completo per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, ${trav()}, partenza ${departure}, alloggio ${selStr}.\n` +
@@ -909,7 +917,7 @@ export default function PlannerPage() {
       `## ESPERIENZE LOCALI E CUCINA\n3-4 con LINK url\n` +
       `## CONSIGLI PRATICI\n- Trasporti\n- Pagamenti\n- App utili\n- Visto\n- Valigia`;
     // Sia mobile che desktop usano streaming — differenza solo nel token limit
-    const tokenLimit = isMobile() ? 6000 : 12000;
+    const tokenLimit = isMobile() ? 8000 : 12000;
     try { await callAI(msg, tokenLimit, t => setFinText(t)); }
     catch (e) { setFinText(`Errore: ${e.message}`); }
     setFinLoad(false);

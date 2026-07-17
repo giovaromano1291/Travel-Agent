@@ -196,6 +196,7 @@ const COORDS = {
   boston:[42.4,-71.1],seattle:[47.6,-122.3],houston:[29.8,-95.4],dallas:[32.8,-96.8],
   atlanta:[33.7,-84.4],nashville:[36.2,-86.8],denver:[39.7,-104.9],phoenix:[33.4,-112.1],
   hawaii:[21.3,-157.8],alaska:[64.2,-153.4],
+  turchia:[39.0,35.3],turkey:[39.0,35.3],
   // America del Nord - Canada/Messico
   toronto:[43.7,-79.4],vancouver:[49.3,-123.1],montreal:[45.5,-73.6],
   cancun:[21.2,-86.9],messico:[23.6,-102.6],mexico:[23.6,-102.6],mexicocity:[19.4,-99.1],
@@ -548,7 +549,7 @@ export default function PlannerPage() {
     "oslo","copenaghen","helsinki","dublino","edimburgo","lione","marsiglia",
     "nizza","siviglia","valencia","porto","cracovia","bucarest","sofia","belgrado",
     "zagabria","lubiana","sarajevo","tirana","riga","vilnius","tallinn",
-    "istanbul","turchia","turkey","tunisia","marocco","morocco","egitto",
+    "istanbul","tunisia","marocco","morocco","egitto",
   ];
   function checkDistance(dep, dst) {
     const dstLower = (dst || '').toLowerCase().trim();
@@ -838,7 +839,7 @@ export default function PlannerPage() {
     const giorni = []; let cur = null;
     for (const l of lines) {
       const t = l.trim();
-      if (/^\*{0,2}giorno\s*\d+/i.test(t) || /^\*\*giorno\s*\d+/i.test(t)) {
+      if (/^#{0,3}\s*\*{0,2}\s*giorno\s*\d+/i.test(t)) {
         if (cur) giorni.push(cur);
         const rawTitle = t.replace(/\*\*/g, '').trim();
         // Mantieni solo "Giorno N - Destinazione" (taglia tutto dopo i due punti)

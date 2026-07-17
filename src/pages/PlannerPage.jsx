@@ -661,7 +661,7 @@ export default function PlannerPage() {
       `SOLO fascia ${bdg}. Il migliore qualita/prezzo ha best:true.\n` +
       `Rispondi SOLO con JSON array:\n` +
       `[{"name":"Nome Hotel","stars":4,"zone":"quartiere","price":"euro150/notte","why":"perche","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
-    const txt = await callAI(msg, 900, null);
+    const txt = await callAI(msg, 1200, null);
     if (!txt) return null;
     try {
       const m = txt.match(/\[[\s\S]*\]/);
@@ -671,6 +671,14 @@ export default function PlannerPage() {
           if (!arr.some(h => h.best)) arr[0].best = true;
           return arr;
         }
+      }
+    } catch {}
+    // Fallback: prova a estrarre almeno un oggetto singolo
+    try {
+      const single = txt.match(/\{[\s\S]*?"name"[\s\S]*?\}/);
+      if (single) {
+        const obj = JSON.parse(single[0]);
+        if (obj && obj.name && obj.name.length > 2) { obj.best = true; return [obj]; }
       }
     } catch {}
     return null;
@@ -830,9 +838,12 @@ export default function PlannerPage() {
     const giorni = []; let cur = null;
     for (const l of lines) {
       const t = l.trim();
-      if (/^\*{0,2}giorno\s*\d+/i.test(t)) {
+      if (/^\*{0,2}giorno\s*\d+/i.test(t) || /^\*\*giorno\s*\d+/i.test(t)) {
         if (cur) giorni.push(cur);
-        cur = { title: t.replace(/\*\*/g, '').trim(), items: [] };
+        const rawTitle = t.replace(/\*\*/g, '').trim();
+        // Mantieni solo "Giorno N - Destinazione" (taglia tutto dopo i due punti)
+        const shortTitle = rawTitle.replace(/:.*/,'').trim();
+        cur = { title: shortTitle, items: [] };
       } else if (cur && (t[0] === '-' || t[0] === '*') && t.length > 2) {
         const item = t.slice(1).trim().replace(/\*\*/g, '');
         const low = item.toLowerCase();

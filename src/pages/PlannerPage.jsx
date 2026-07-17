@@ -165,25 +165,36 @@ async function callAI(userMsg, maxTok = 1000, onChunk) {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: userMsg, maxTokens: maxTok, stream: !mobile }),
+      body: JSON.stringify({ message: userMsg, maxTokens: maxTok, stream: true }),
     });
     if (!res.ok) return '';
 
     if (mobile) {
-      // Su mobile: risposta JSON completa in una volta
-      let data;
-      try { data = await res.json(); } catch (e) { console.error('JSON parse error:', e); return ''; }
-      // Gestisci sia risposta streaming che non-streaming
-      let text = '';
-      if (data?.content) {
-        // Risposta non-streaming diretta
-        text = data.content.find(b => b.type === 'text')?.text || data.content?.[0]?.text || '';
-      } else if (data?.error) {
-        console.error('API error:', data.error);
+      // Su mobile: usa streaming SSE come desktop ma con gestione errori
+      // Non-streaming causa timeout sulla Edge Function Vercel (limite 25s)
+      try {
+        const reader = res.body.getReader();
+        const dc = new TextDecoder();
+        let full = '';
+        let lastChunkTime = Date.now();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          lastChunkTime = Date.now();
+          for (const line of dc.decode(value).split('\n')) {
+            if (line.startsWith('data: ')) {
+              try {
+                const jj = JSON.parse(line.slice(6));
+                if (jj.delta?.text) { full += jj.delta.text; if (onChunk) onChunk(full); }
+              } catch {}
+            }
+          }
+        }
+        return full;
+      } catch (e) {
+        console.error('Mobile streaming error:', e);
         return '';
       }
-      if (text && onChunk) onChunk(text);
-      return text;
     }
 
     // Desktop: streaming SSE progressivo
@@ -897,38 +908,10 @@ export default function PlannerPage() {
       gdStr +
       `## ESPERIENZE LOCALI E CUCINA\n3-4 con LINK url\n` +
       `## CONSIGLI PRATICI\n- Trasporti\n- Pagamenti\n- App utili\n- Visto\n- Valigia`;
-    if (isMobile()) {
-      // Mobile: 3 chiamate separate per evitare timeout
-      try {
-        const n = '\n';
-        const msg1 = `Per ${dest}, ${period} ${y}, ${style}, budget ${budget}, ${trav()}, da ${departure}. Scrivi in italiano:${n}` +
-          `## PRESENTAZIONE DELLA DESTINAZIONE${n}Descrivi in 3-4 frasi evocative. NON includere voli qui.${n}` +
-          transportBlock +
-          `## ALLOGGIO${n}Per ogni citta/area: **[Citta]** → [Nome Hotel]${n}LINK [url booking]${n}[Descrizione breve]${n}Alloggi: ${selStr}${n}`;
-        const p1 = await callAI(msg1, 2000, null);
-
-        const msg2 = `Itinerario ${dest}, ${duration}, ${style}, budget ${budget}, ${trav()}, alloggio ${selStr}.${n}` +
-          `${formatStr}. Separa giorni con ---. VIETATE tabelle markdown.${n}` +
-          `## ITINERARIO GIORNO PER GIORNO${n}SEGUI questa bozza aggiungendo dettagli e LINK url-biglietti:${n}${draftText.slice(0, 2000)}${n}`;
-        const p2 = await callAI(msg2, 5000, null);
-
-        const msg3 = `Per viaggio a ${dest}, ${period} ${y}, ${style}, budget ${budget}. Scrivi in italiano:${n}` +
-          `## ESPERIENZE LOCALI E CUCINA${n}3-4 esperienze con LINK url${n}` +
-          `## CONSIGLI PRATICI${n}- Trasporti: [dettagli]${n}- Pagamenti: [dettagli]${n}- App utili: [2-3 app]${n}- Visto: [necessario?]${n}- Valigia: [cosa portare]${n}`;
-        const p3 = await callAI(msg3, 1500, null);
-
-        const full = [p1, p2, p3].filter(Boolean).join('\n\n');
-        if (full.trim().length < 20) {
-          setFinText('Errore nel caricamento. Torna indietro e riprova.');
-        } else {
-          setFinText(full);
-        }
-      } catch (e) { setFinText(`Errore: ${e.message}`); }
-    } else {
-      // Desktop: chiamata unica con streaming
-      try { await callAI(msg, 12000, t => setFinText(t)); }
-      catch (e) { setFinText(`Errore: ${e.message}`); }
-    }
+    // Sia mobile che desktop usano streaming — differenza solo nel token limit
+    const tokenLimit = isMobile() ? 6000 : 12000;
+    try { await callAI(msg, tokenLimit, t => setFinText(t)); }
+    catch (e) { setFinText(`Errore: ${e.message}`); }
     setFinLoad(false);
   }
 

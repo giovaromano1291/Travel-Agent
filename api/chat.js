@@ -1,5 +1,5 @@
 // api/chat.js — Vercel Edge Function
-// Supporta streaming (desktop) e non-streaming (mobile)
+// Usa SEMPRE streaming SSE per evitare timeout (limite 25s piano Hobby)
 
 export const config = { runtime: 'edge' };
 
@@ -9,22 +9,12 @@ export default async function handler(req) {
   }
 
   let body;
-  try {
-    body = await req.json();
-  } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+  try { body = await req.json(); }
+  catch { return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json' } }); }
 
-  const { message, maxTokens = 1000, stream = true } = body;
-
+  const { message, maxTokens = 1000 } = body;
   if (!message) {
-    return new Response(JSON.stringify({ error: 'No message provided' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return new Response(JSON.stringify({ error: 'No message' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
 
   const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
@@ -37,7 +27,7 @@ export default async function handler(req) {
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
       max_tokens: maxTokens,
-      stream: stream,
+      stream: true, // SEMPRE streaming per evitare timeout Edge Function
       messages: [{ role: 'user', content: message }],
     }),
   });
@@ -50,19 +40,7 @@ export default async function handler(req) {
     });
   }
 
-  // Mobile (stream: false) — risposta JSON diretta
-  if (!stream) {
-    const data = await anthropicRes.json();
-    return new Response(JSON.stringify(data), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-    });
-  }
-
-  // Desktop (stream: true) — SSE passthrough
+  // Passthrough dello stream SSE direttamente al client
   return new Response(anthropicRes.body, {
     status: 200,
     headers: {

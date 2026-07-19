@@ -856,9 +856,9 @@ export default function PlannerPage() {
     const giorni = []; let cur = null;
     for (const l of lines) {
       const t = l.trim();
-      if (/^\*{0,2}giorno\s*\d+/i.test(t)) {
+      if (/^#{0,3}\s*\*{0,2}giorno\s*\d+/i.test(t)) {
         if (cur) giorni.push(cur);
-        cur = { title: t.replace(/\*\*/g, '').trim(), items: [] };
+        cur = { title: t.replace(/^#{1,3}\s*/, '').replace(/\*\*/g, '').trim(), items: [] };
       } else if (cur && (t[0] === '-' || t[0] === '*') && t.length > 2) {
         const item = t.slice(1).trim().replace(/\*\*/g, '');
         const low = item.toLowerCase();
@@ -872,6 +872,18 @@ export default function PlannerPage() {
       }
     }
     if (cur) giorni.push(cur);
+    // Rete di sicurezza: se la bozza non usa il formato "Giorno N", mostro almeno
+    // i blocchi ### del piano cosi il riepilogo non resta vuoto.
+    if (giorni.length === 0 && (draftText || planText || revText)) {
+      const src = (revText || planText || '').split('\n');
+      for (const l of src) {
+        const t = l.trim();
+        if (t.startsWith('###')) {
+          const title = t.replace(/^#+\s*/, '').replace(/\[.*?\]/g, '').replace(/\*\*/g, '').trim();
+          if (title) giorni.push({ title, items: [] });
+        }
+      }
+    }
     return giorni;
   })();
 

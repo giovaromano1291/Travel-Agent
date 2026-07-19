@@ -662,7 +662,7 @@ export default function PlannerPage() {
       `SOLO fascia ${bdg}. Il migliore qualita/prezzo ha best:true.\n` +
       `Rispondi SOLO con JSON array:\n` +
       `[{"name":"Nome Hotel","stars":4,"zone":"quartiere","price":"euro150/notte","why":"perche","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
-    const txt = await callAI(msg, 1200, null);
+    const txt = await callAI(msg, 1600, null);
     if (!txt) return null;
     try {
       const m = txt.match(/\[[\s\S]*\]/);
@@ -814,11 +814,11 @@ export default function PlannerPage() {
       `## PRESENTAZIONE DELLA DESTINAZIONE\n` +
       transportBlock +
       `## ALLOGGIO\n${selStr}: zona e perche ottimale\nLINK https://www.booking.com/search.html?ss=${encodeURIComponent(dest)}\n` +
-      `## ITINERARIO GIORNO PER GIORNO\nSEGUI ESATTAMENTE questa bozza approvata aggiungendo solo dettagli e link:\n${draftText.slice(0, 2500)}\n\nPer ogni attivita aggiungi: LINK url-biglietti${wantsFood ? ' e LINK url-ristorante' : ''}\n` +
+      `## ITINERARIO GIORNO PER GIORNO\nSEGUI ESATTAMENTE questa bozza approvata aggiungendo solo dettagli e link (NON saltare nessun giorno):\n${draftText.slice(0, 4000)}\n\nPer ogni attivita aggiungi: LINK url-biglietti${wantsFood ? ' e LINK url-ristorante' : ''}\n` +
       gdStr +
       `## ESPERIENZE LOCALI E CUCINA\n3-4 con LINK url\n` +
       `## CONSIGLI PRATICI\n- Trasporti\n- Pagamenti\n- App utili\n- Visto\n- Valigia`;
-    try { await callAI(msg, 8000, t => setFinText(t)); }
+    try { await callAI(msg, 10000, t => setFinText(t)); }
     catch (e) { setFinText(`Errore: ${e.message}`); }
     setFinLoad(false);
   }

@@ -664,9 +664,15 @@ export default function PlannerPage() {
     if (!out.length) out = [{ name: dest, days: null, type: null }];
 
     const totalNights = parseDurationToNights(duration);
-    if (out.some(o => o.type === 'quartiere')) {
+    const cities = out.filter(o => o.type === 'citta');
+    // Se non c'e nessuna CITTA (solo quartieri o blocchi senza tipo) => destinazione
+    // singola divisa in zone interne: una base unica.
+    if (cities.length === 0) {
       return [{ name: dest, days: totalNights || 2, type: 'citta', isSingleCity: true }];
     }
+    // Altrimenti (una o piu CITTA, con o senza quartieri) uso le CITTA come basi:
+    // i quartieri sono suddivisioni interne e non diventano basi separate.
+    out = cities;
     let sumDays = out.reduce((s, o) => s + (o.days || 0), 0);
     if (totalNights && sumDays !== totalNights) {
       const n = out.length, base = Math.floor(totalNights / n), rem = totalNights - base * n;

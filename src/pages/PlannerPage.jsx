@@ -100,25 +100,29 @@ function mdHtml(t) {
     });
 }
 
+/* ─── Mobile detection (iOS / Android / iPadOS 13+) ────────────────────── */
 function isMobile() {
   if (typeof navigator === 'undefined') return false;
-  const isIpad = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-  return isIpad || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPod|Android|BlackBerry|IEMobile|Opera Mini/i.test(ua)) return true;
+  if (/iPad/i.test(ua)) return true;
+  // iPadOS 13+ si identifica come "MacIntel" con supporto touch
+  if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
+  return false;
 }
 
-// Ottimizzazione geografica: percorso "a goccia" per viaggi in auto
-function logisticaPrompt(departure, dest, transport) {
-  if (!transport) return '';
-  const t = transport.toLowerCase();
-  if (!t.includes('auto') && !t.includes('noleggio')) return '';
-  return '\n\nOTTIMIZZAZIONE LOGISTICA (viaggio in ' + transport + '):\n' +
-    'Ordina le tappe come percorso a goccia (andata/ritorno efficiente):\n' +
-    '1. Parti da ' + departure + '\n' +
-    '2. Raggiungi prima le mete PIU LONTANE da ' + departure + '\n' +
-    '3. Prosegui verso mete intermedie\n' +
-    '4. Concludi con tappe gia sulla via del ritorno verso ' + departure + '\n' +
-    'Es. Roma-Umbria: Spoleto -> Assisi -> Perugia -> Orvieto (gia verso Roma)\n' +
-    'Forma un arco geografico efficiente, non un percorso casuale.';
+/* Estrae il testo dagli eventi SSE "data: {...}" (usato dal fallback mobile) */
+function parseSSEText(raw) {
+  let full = '';
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('data: ')) {
+      try {
+        const jj = JSON.parse(line.slice(6));
+        if (jj.delta?.text) full += jj.delta.text;
+      } catch {}
+    }
+  }
+  return full;
 }
 
 async function callAI(userMsg, maxTok = 1000, onChunk) {
@@ -126,21 +130,24 @@ async function callAI(userMsg, maxTok = 1000, onChunk) {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: userMsg, maxTokens: maxTok, stream: true }),
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: maxTok,
+        stream: true,
+        messages: [{ role: 'user', content: userMsg }],
+      }),
     });
     if (!res.ok) return '';
-    // Fallback Safari iOS: res.body.getReader non sempre disponibile
-    if (!res.body || typeof res.body.getReader !== 'function') {
-      const text = await res.text();
-      let full = '';
-      for (const line of text.split('\n')) {
-        if (line.startsWith('data: ')) {
-          try { const jj = JSON.parse(line.slice(6)); if (jj.delta?.text) full += jj.delta.text; } catch {}
-        }
-      }
-      if (onChunk && full) onChunk(full);
+
+    // Fallback per Safari iOS / browser mobile che non supportano res.body.getReader()
+    const canStream = res.body && typeof res.body.getReader === 'function';
+    if (!canStream || isMobile()) {
+      const raw = await res.text();
+      const full = parseSSEText(raw);
+      if (onChunk) onChunk(full);
       return full;
     }
+
     const reader = res.body.getReader();
     const dc = new TextDecoder();
     let full = '';
@@ -196,7 +203,6 @@ const COORDS = {
   boston:[42.4,-71.1],seattle:[47.6,-122.3],houston:[29.8,-95.4],dallas:[32.8,-96.8],
   atlanta:[33.7,-84.4],nashville:[36.2,-86.8],denver:[39.7,-104.9],phoenix:[33.4,-112.1],
   hawaii:[21.3,-157.8],alaska:[64.2,-153.4],
-  turchia:[39.0,35.3],turkey:[39.0,35.3],
   // America del Nord - Canada/Messico
   toronto:[43.7,-79.4],vancouver:[49.3,-123.1],montreal:[45.5,-73.6],
   cancun:[21.2,-86.9],messico:[23.6,-102.6],mexico:[23.6,-102.6],mexicocity:[19.4,-99.1],
@@ -222,6 +228,28 @@ function haversine([lat1,lon1],[lat2,lon2]) {
   const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
   const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+/* ─── Ottimizzazione geografica "a goccia" (viaggio in auto) ───────────── */
+function isCarTransport(transport) {
+  const t = (transport || '').toLowerCase();
+  return t.includes('auto') || t.includes('noleggio');
+}
+
+/* Testo da iniettare nei prompt AI quando il viaggio è in auto:
+   percorso ottimizzato "a goccia" — prima le mete più lontane dalla partenza,
+   poi progressivamente quelle sulla via del ritorno. */
+function dropRouteHint(departure, dest, transport) {
+  if (!isCarTransport(transport)) return '';
+  return (
+    `\n\nOTTIMIZZAZIONE GEOGRAFICA (viaggio in ${transport} da ${departure}):\n` +
+    `L'utente viaggia in auto e torna al punto di partenza. Ordina le tappe con la logica del "percorso a goccia":\n` +
+    `1. Raggiungi PRIMA la meta più LONTANA da ${departure}.\n` +
+    `2. Prosegui verso le tappe intermedie lungo il percorso di ritorno.\n` +
+    `3. Le ultime tappe devono essere quelle più VICINE a ${departure}.\n` +
+    `Esempio: partenza Roma, Umbria → Spoleto (più lontano) → Assisi → Perugia → Orvieto (già verso Roma).\n` +
+    `Applica questa logica geografica all'ordine delle tappe.`
+  );
 }
 
 /* ─── Inline CSS (scoped to the planner) ───────────────────────────────── */
@@ -312,12 +340,20 @@ const CSS = `
 .p-ync:hover{border-color:#C9A84C;background:#1a1400}
 .p-dpick{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .p-save-bar{background:#1a1400;border:.5px solid #C9A84C;border-radius:10px;padding:10px 16px;font-size:12px;color:#e8c97a;margin-top:1rem;display:flex;align-items:center;gap:8px}
-/* Mobile */
-html,body{margin:0;padding:0;background:#0d0d0d;overflow-x:hidden}
-@media(max-width:600px){
-  .p-prog{justify-content:flex-start!important}
-  .p-inp[type="date"],.p-inp,.p-ta{font-size:16px}
-  .p-dpick{grid-template-columns:1fr!important}
+/* ─── Mobile (iOS / Android) ─── */
+.planner-wrap input,.planner-wrap textarea,.planner-wrap select{font-size:16px}
+.planner-wrap *{-webkit-tap-highlight-color:transparent}
+.p-prog{-webkit-overflow-scrolling:touch}
+@media (max-width:600px){
+  .planner-wrap{padding:1.2rem .8rem 3rem}
+  .p-card{padding:1.4rem 1.2rem}
+  .p-bc{grid-template-columns:1fr}
+  .p-fc,.p-yn,.p-dpick,.p-lgrid{grid-template-columns:1fr}
+  .p-igrid{grid-template-columns:1fr 1fr}
+  .p-brow{flex-direction:column}
+  .p-rbody,.p-rhead{padding-left:1.1rem;padding-right:1.1rem}
+  .p-sl{font-size:7px;max-width:44px}
+  .p-sc{width:24px;height:24px}
 }
 `;
 
@@ -474,7 +510,6 @@ export default function PlannerPage() {
   const draftRef = useRef(null);
   const finLoadRef   = useRef(false);
   const draftLoadRef = useRef(false);
-  const progBarRef   = useRef(null);
 
   useEffect(() => {
     if (finLoad) finLoadRef.current = true;
@@ -485,16 +520,6 @@ export default function PlannerPage() {
     if (draftLoad) draftLoadRef.current = true;
     if (!draftLoad && draftLoadRef.current) { draftLoadRef.current = false; if (draftRef.current) draftRef.current.scrollTop = 0; }
   }, [draftLoad]);
-
-  // Scroll barra step su mobile: porta step attivo al centro
-  useEffect(() => {
-    const t = setTimeout(() => {
-      if (!progBarRef.current) return;
-      const active = progBarRef.current.querySelector('.p-sc.act');
-      if (active) active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-    }, 100);
-    return () => clearTimeout(t);
-  }, [step]);
 
   /* ── helpers ── */
   function trav() {
@@ -549,7 +574,7 @@ export default function PlannerPage() {
     "oslo","copenaghen","helsinki","dublino","edimburgo","lione","marsiglia",
     "nizza","siviglia","valencia","porto","cracovia","bucarest","sofia","belgrado",
     "zagabria","lubiana","sarajevo","tirana","riga","vilnius","tallinn",
-    "istanbul","tunisia","marocco","morocco","egitto",
+    "istanbul","turchia","turkey","tunisia","marocco","morocco","egitto",
   ];
   function checkDistance(dep, dst) {
     const dstLower = (dst || '').toLowerCase().trim();
@@ -599,10 +624,10 @@ export default function PlannerPage() {
       `Crea un piano visivo dell'itinerario per: ${dest}, ${period} ${y}, ${duration}${duration.includes('Weekend') ? ' (solo 2-3 giorni, max 2 destinazioni vicine)' : ''}, ${style}, ${trav()}, budget ${budget}.\n\n` +
       `REGOLA CRITICA SUL TIPO:\n- Usa [QUARTIERE] se ${dest} e una SINGOLA CITTA\n- Usa [CITTA] SOLO se l'itinerario tocca piu CITTA DIVERSE\n- Quartieri, arrondissement, zone di una stessa citta = SEMPRE [QUARTIERE]\n\n` +
       `FORMATO OBBLIGATORIO per ogni blocco:\n### NOME (N giorni) [TIPO]\n- **Cosa vedere**: luogo - perche\n- **Cosa fare**: attivita - descrizione\n- **Da non perdere**: esperienza - perche\n\n` +
-      `REGOLE:\n1. Solo ### per i titoli\n2. Niente tabelle\n3. Inizia subito col primo ###\n4. La somma dei giorni deve corrispondere a: ${duration}\n5. Scrivi in italiano\n\n` +
-      logisticaPrompt(dep, dest, transport) +
+      `REGOLE:\n1. Solo ### per i titoli\n2. Niente tabelle\n3. Inizia subito col primo ###\n4. La somma dei giorni deve corrispondere a: ${duration}\n5. Scrivi in italiano\n6. OGNI citta/tappa deve avere il PROPRIO titolo ### su una riga separata; non unire mai due localita nello stesso blocco e non attaccare un nuovo titolo alla fine di un bullet\n7. Dopo ogni blocco lascia una riga vuota prima del ### successivo\n\n` +
       `ESEMPIO singola citta (Parigi, 5gg):\n### LOUVRE & MARAIS (2 giorni) [QUARTIERE]\n- **Cosa vedere**: Museo del Louvre\n### MONTMARTRE (1 giorno) [QUARTIERE]\n### EIFFEL & SAINT-GERMAIN (2 giorni) [QUARTIERE]\n\n` +
-      `ESEMPIO piu citta (Costa Azzurra, 7gg):\n### NIZZA (3 giorni) [CITTA]\n### MONACO (2 giorni) [CITTA]\n### CANNES (2 giorni) [CITTA]`;
+      `ESEMPIO piu citta (Costa Azzurra, 7gg):\n### NIZZA (3 giorni) [CITTA]\n### MONACO (2 giorni) [CITTA]\n### CANNES (2 giorni) [CITTA]` +
+      dropRouteHint(dep, dest, transport);
     await callAI(msg, 1800, t => setPlanText(t));
     setPlanLoad(false);
   }
@@ -614,8 +639,8 @@ export default function PlannerPage() {
       `Piano originale per ${dest} (${period} ${y}):\n${planText}\n\n` +
       `Modifiche richieste: ${mods}\n\n` +
       `Rielabora con STESSO FORMATO: ### NOME (N giorni) [TIPO]\n- **Cosa vedere/fare/da non perdere**\n` +
-      `REGOLE: solo ###, niente tabelle, somma giorni = ${duration}. Scrivi in italiano.` +
-      logisticaPrompt(departure, dest, transport);
+      `REGOLE: solo ###, niente tabelle, somma giorni = ${duration}. OGNI citta ha il proprio titolo ### su riga separata, non unire mai due localita nello stesso blocco. Scrivi in italiano.` +
+      dropRouteHint(departure, dest, transport);
     await callAI(msg, 2000, t => setRevText(t));
     setRevLoad(false);
   }
@@ -657,12 +682,13 @@ export default function PlannerPage() {
       ? '2-3 stelle o B&B boutique. Fascia 60-120 eur/notte.'
       : '3-4 stelle: NH Hotels, Starhotels, Marriott Courtyard. Fascia 120-250 eur/notte.';
     const msg =
-      `Proponi 3 hotel REALI esistenti a ${cityName}, fascia ${bdg} (${hint}).\n` +
+      `Proponi ESATTAMENTE 3 hotel REALI ed esistenti a ${cityName}, TUTTI E 3 della fascia ${bdg} (${hint}).\n` +
       `Periodo: ${period} ${tripYear || CY}. Viaggiatori: ${trav()}.\n` +
-      `SOLO fascia ${bdg}. Il migliore qualita/prezzo ha best:true.\n` +
-      `Rispondi SOLO con JSON array:\n` +
-      `[{"name":"Nome Hotel","stars":4,"zone":"quartiere","price":"euro150/notte","why":"perche","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
-    const txt = await callAI(msg, 1600, null);
+      `VINCOLO: tutti e 3 gli hotel devono appartenere alla fascia ${bdg}; il prezzo indicato deve essere coerente con quella fascia. Nomi propri reali, niente placeholder.\n` +
+      `Per ognuno indica: prezzo a notte coerente con la fascia, zona, 3 pro. Il migliore qualita/prezzo ha best:true (uno solo).\n` +
+      `Rispondi SOLO con JSON array di 3 oggetti, senza testo prima o dopo:\n` +
+      `[{"name":"Nome Hotel","stars":4,"zone":"quartiere","price":"euro150/notte","why":"perche sceglierlo","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
+    const txt = await callAI(msg, 900, null);
     if (!txt) return null;
     try {
       const m = txt.match(/\[[\s\S]*\]/);
@@ -672,14 +698,6 @@ export default function PlannerPage() {
           if (!arr.some(h => h.best)) arr[0].best = true;
           return arr;
         }
-      }
-    } catch {}
-    // Fallback: prova a estrarre almeno un oggetto singolo
-    try {
-      const single = txt.match(/\{[\s\S]*?"name"[\s\S]*?\}/);
-      if (single) {
-        const obj = JSON.parse(single[0]);
-        if (obj && obj.name && obj.name.length > 2) { obj.best = true; return [obj]; }
       }
     } catch {}
     return null;
@@ -693,41 +711,39 @@ export default function PlannerPage() {
     const starsQ = budget === 'luxury' ? '&stars=5' : budget === 'economico' ? '&stars=2' : '&stars=4';
     let bases = append ? JSON.parse(JSON.stringify(hotelBases)) : [];
 
-    for (const cl of clusters) {
+    // Fallback usato quando la chiamata AI per una citta non restituisce hotel validi
+    const makeFallback = (cityName) => [{
+      name: `Cerca hotel ${budget} a ${cityName}`, stars: budget === 'luxury' ? 5 : budget === 'economico' ? 3 : 4,
+      zone: 'centro', price: 'vedi Booking',
+      why: `Hotel ${budget} disponibili a ${cityName}`,
+      pros: ['prezzi aggiornati', 'recensioni reali', 'cancellazione gratuita'], best: true,
+      url: `https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}${starsQ}`,
+    }];
+
+    // Lancio TUTTE le citta in parallelo: evita il timeout 25s del piano Hobby
+    // (in sequenza 4 chiamate superavano il limite e le ultime citta fallivano).
+    const results = await Promise.all(clusters.map(async (cl) => {
+      const searchCity = cl.isSingleCity ? dest : cl.name;
       try {
-        const searchCity = cl.isSingleCity ? dest : cl.name;
         let hotels = await fetchHotelsForCity(searchCity, budget);
-        if (!hotels || !Array.isArray(hotels) || hotels.length === 0) {
-          hotels = [{
-            name: `Cerca hotel ${budget} a ${searchCity}`, stars: budget === 'luxury' ? 5 : budget === 'economico' ? 3 : 4,
-            zone: 'centro', price: 'vedi Booking',
-            why: `Hotel disponibili a ${searchCity}`,
-            pros: ['prezzi aggiornati', 'recensioni reali', 'cancellazione gratuita'], best: true,
-            url: `https://www.booking.com/search.html?ss=${encodeURIComponent(searchCity)}${starsQ}`,
-          }];
-        }
-        const existIdx = bases.findIndex(b => b.city === cl.name);
-        if (existIdx >= 0) {
-          bases[existIdx].hotels = append ? [...bases[existIdx].hotels, ...hotels] : hotels;
-        } else {
-          bases.push({ city: cl.name, days: cl.days || 2, hotels });
-        }
-        setHotelBases(JSON.parse(JSON.stringify(bases)));
+        if (!hotels || !Array.isArray(hotels) || hotels.length === 0) hotels = makeFallback(searchCity);
+        return { cl, hotels };
       } catch (err) {
         console.error('Errore hotel per', cl.name, err);
-        bases.push({
-          city: cl.name, days: cl.days || 2,
-          hotels: [{
-            name: `Cerca hotel a ${cl.name}`, stars: 4,
-            zone: 'centro', price: 'vedi Booking',
-            why: 'Clicca per vedere le opzioni disponibili',
-            pros: ['prezzi aggiornati', 'cancellazione gratuita'], best: true,
-            url: `https://www.booking.com/search.html?ss=${encodeURIComponent(cl.name)}${starsQ}`,
-          }]
-        });
-        setHotelBases(JSON.parse(JSON.stringify(bases)));
+        return { cl, hotels: makeFallback(searchCity) };
+      }
+    }));
+
+    // Inserisco i risultati mantenendo l'ordine dell'itinerario e la logica append
+    for (const { cl, hotels } of results) {
+      const existIdx = bases.findIndex(b => b.city === cl.name);
+      if (existIdx >= 0) {
+        bases[existIdx].hotels = append ? [...bases[existIdx].hotels, ...hotels] : hotels;
+      } else {
+        bases.push({ city: cl.name, days: cl.days || 2, hotels });
       }
     }
+    setHotelBases(JSON.parse(JSON.stringify(bases)));
     setHotelLoad(false);
   }
 
@@ -772,7 +788,7 @@ export default function PlannerPage() {
       `REGOLE: MATTINA/POMERIGGIO/SERA su riga isolata maiuscolo. Ogni attivita inizia con - su riga separata. Riga vuota tra sezioni.\n\n` +
       `## LOGISTICA GENERALE\nOGNI punto su riga separata con -:\n- Trasporti: ...\n- Pagamenti: ...\n- App utili: ...\n- Prenotazioni: ...\n- Budget: ...\n` +
       `Scrivi in italiano.` +
-      logisticaPrompt(departure, dest, transport);
+      dropRouteHint(departure, dest, transport);
     await callAI(msg, 8000, t => setDraftText(t));
     setDraftLoad(false);
   }
@@ -800,7 +816,7 @@ export default function PlannerPage() {
       : '';
     const transportBlock = (() => {
       const tr = (transport || '').toLowerCase();
-      if (tr.includes('auto'))  return `## TRASPORTO\nViaggio in ${transport} da ${departure} a ${dest}. Percorso ottimizzato a goccia: prima le mete piu lontane, poi quelle sulla via del ritorno. Autostrade, soste e parcheggi.\n`;
+      if (tr.includes('auto'))  return `## TRASPORTO\nViaggio in ${transport} da ${departure} a ${dest}. Percorso ottimizzato "a goccia" (prima le mete più lontane, poi quelle sulla via del ritorno verso ${departure}). Autostrade consigliate, soste e parcheggi.\n`;
       if (tr.includes('treno')) return `## TRASPORTO\nViaggio in treno da ${departure} a ${dest}. Trenitalia o Italo: orari, prezzi, stazione.\nLINK https://www.trenitalia.com\n`;
       if (tr.includes('bus'))   return `## TRASPORTO\nViaggio in bus da ${departure} a ${dest}. Compagnie, fermate, orari.\n`;
       return `## VOLO CONSIGLIATO\nRotta ${departure} - ${dest} ${period} ${y}: compagnie, prezzi, miglior opzione.\nLINK https://www.google.com/travel/flights?q=${encodeURIComponent(`${departure} ${dest}`)}\nLINK https://www.skyscanner.it/voli-per/${encodeURIComponent(dest.toLowerCase())}\n`;
@@ -814,11 +830,12 @@ export default function PlannerPage() {
       `## PRESENTAZIONE DELLA DESTINAZIONE\n` +
       transportBlock +
       `## ALLOGGIO\n${selStr}: zona e perche ottimale\nLINK https://www.booking.com/search.html?ss=${encodeURIComponent(dest)}\n` +
-      `## ITINERARIO GIORNO PER GIORNO\nSEGUI ESATTAMENTE questa bozza approvata aggiungendo solo dettagli e link (NON saltare nessun giorno):\n${draftText.slice(0, 4000)}\n\nPer ogni attivita aggiungi: LINK url-biglietti${wantsFood ? ' e LINK url-ristorante' : ''}\n` +
+      `## ITINERARIO GIORNO PER GIORNO\nSEGUI ESATTAMENTE questa bozza approvata aggiungendo solo dettagli e link:\n${draftText.slice(0, 2500)}\n\nPer ogni attivita aggiungi: LINK url-biglietti${wantsFood ? ' e LINK url-ristorante' : ''}\n` +
       gdStr +
       `## ESPERIENZE LOCALI E CUCINA\n3-4 con LINK url\n` +
-      `## CONSIGLI PRATICI\n- Trasporti\n- Pagamenti\n- App utili\n- Visto\n- Valigia`;
-    try { await callAI(msg, 10000, t => setFinText(t)); }
+      `## CONSIGLI PRATICI\n- Trasporti\n- Pagamenti\n- App utili\n- Visto\n- Valigia` +
+      dropRouteHint(departure, dest, transport);
+    try { await callAI(msg, 8000, t => setFinText(t)); }
     catch (e) { setFinText(`Errore: ${e.message}`); }
     setFinLoad(false);
   }
@@ -839,12 +856,9 @@ export default function PlannerPage() {
     const giorni = []; let cur = null;
     for (const l of lines) {
       const t = l.trim();
-      if (/^#{0,3}\s*\*{0,2}\s*giorno\s*\d+/i.test(t)) {
+      if (/^\*{0,2}giorno\s*\d+/i.test(t)) {
         if (cur) giorni.push(cur);
-        const rawTitle = t.replace(/\*\*/g, '').trim();
-        // Mantieni solo "Giorno N - Destinazione" (taglia tutto dopo i due punti)
-        const shortTitle = rawTitle.replace(/:.*/,'').trim();
-        cur = { title: shortTitle, items: [] };
+        cur = { title: t.replace(/\*\*/g, '').trim(), items: [] };
       } else if (cur && (t[0] === '-' || t[0] === '*') && t.length > 2) {
         const item = t.slice(1).trim().replace(/\*\*/g, '');
         const low = item.toLowerCase();
@@ -900,7 +914,7 @@ export default function PlannerPage() {
         <div className="p-dl" />
 
         {/* Progress */}
-        {step <= 14 && <div className="p-prog" ref={progBarRef}>{progressBar}</div>}
+        {step <= 14 && <div className="p-prog">{progressBar}</div>}
         {step > 1 && step <= 14 && (
           <button className="p-back" onClick={goBack}>← Torna indietro</button>
         )}

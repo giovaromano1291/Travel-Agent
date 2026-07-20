@@ -413,7 +413,7 @@ function Badge({ text }) {
 }
 
 /* ─── HCard — top-level component (must be outside PlannerPage) ─────────── */
-function HCard({ h, bi, city: cityName, budget, selKeys, setSelKeys, selNames, setSelNames }) {
+function HCard({ h, bi, city: cityName, budget, dates, selKeys, setSelKeys, selNames, setSelNames }) {
   const nm = h.name || 'Hotel';
   const st = h.stars || 3;
   const zn = h.zone || h.zona || 'centro';
@@ -421,7 +421,13 @@ function HCard({ h, bi, city: cityName, budget, selKeys, setSelKeys, selNames, s
   const wh = h.why || h.perche || '';
   const ps = h.pros || [];
   const bs = h.best || false;
-  const ur = h.url || `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(cityName)}`;
+  // Link Booking specifico per QUESTO hotel: costruito dal nome della struttura,
+  // non da h.url (che l'AI genera spesso identico per tutte le alternative).
+  const isFallbackName = /^cerca hotel/i.test(nm);
+  const query = isFallbackName
+    ? cityName
+    : (nm.toLowerCase().includes((cityName || '').toLowerCase()) ? nm : `${nm} ${cityName}`);
+  const ur = `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(query)}${dates || ''}`;
   const sk = `${bi}-${nm}`;
   const isSel = selKeys.includes(sk);
   function select() {
@@ -527,6 +533,13 @@ export default function PlannerPage() {
   }, [draftLoad]);
 
   /* ── helpers ── */
+  // Parametri date per Booking: aggiunti SOLO se l'utente ha scelto date esatte
+  // dal calendario (startDate + endDate). Con mese/stagione restituisce '' (nessuna data).
+  function bookingDates() {
+    if (startDate && endDate) return `&checkin=${startDate}&checkout=${endDate}`;
+    return '';
+  }
+
   function trav() {
     const b = `${adults} adult${adults > 1 ? 'i' : 'o'}`;
     const k = children > 0 ? `, ${children} bambin${children > 1 ? 'i' : 'o'} (eta: ${childAges.filter(Boolean).join(', ')})` : '';
@@ -842,12 +855,19 @@ export default function PlannerPage() {
     const formatStr = isMPS
       ? 'Dividi ogni giorno in tre blocchi: MATTINA / POMERIGGIO / SERA (righe separate maiuscolo). Elenca attivita come bullet - sotto ogni blocco.'
       : `SCHEDULE ORE PER ORA: ogni attivita con orario preciso. Formato:\nGiorno 1 - Titolo\n07:00 - Partenza da ${departure}\n09:30 - Arrivo e check-in\n10:00 - Visita sito X (durata: 1.5 ore)\nOgni riga deve avere ORARIO - ATTIVITA. Includi tempi di spostamento, mezzi, durate.`;
+    // Link Booking per l'alloggio SCELTO (selStr), non generico sulla destinazione.
+    // selStr puo essere "Citta: Nome Hotel" o piu voci separate da " | ": prendo la prima
+    // e rimuovo l'eventuale prefisso "Citta: " per cercare il nome della struttura.
+    const firstHotel = (selStr || '').split(' | ')[0].replace(/^[^:]+:\s*/, '').trim();
+    const hotelSearch = firstHotel
+      ? `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(`${firstHotel} ${dest}`)}${bookingDates()}`
+      : `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(dest)}${bookingDates()}`;
     const msg =
       `Itinerario completo per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, ${trav()}, partenza ${departure}, alloggio ${selStr}.\n` +
       `Formato giorni: ${formatStr}. Separa giorni con ---. Scrivi in italiano con ## per sezioni:\n` +
       `## PRESENTAZIONE DELLA DESTINAZIONE\n` +
       transportBlock +
-      `## ALLOGGIO\n${selStr}: zona e perche ottimale\nLINK https://www.booking.com/searchresults.html?ss=${encodeURIComponent(dest)}\n` +
+      `## ALLOGGIO\n${selStr}: zona e perche ottimale\nLINK ${hotelSearch}\n` +
       `IMPORTANTE sui link alloggio: usa SOLO link di ricerca Booking nel formato https://www.booking.com/searchresults.html?ss=NOME_CITTA. Non inventare mai URL di siti ufficiali di hotel ne link diretti a strutture, perche risultano inesistenti.\n` +
       `## ITINERARIO GIORNO PER GIORNO\nSEGUI ESATTAMENTE questa bozza approvata aggiungendo solo dettagli e link:\n${draftText.slice(0, 2500)}\n\nPer ogni attivita aggiungi: LINK url-biglietti${wantsFood ? ' e LINK url-ristorante' : ''}\n` +
       gdStr +
@@ -922,7 +942,7 @@ export default function PlannerPage() {
   const lks = [
     { l:'Google Flights', s:`Voli da ${departure}`, h:`https://www.google.com/travel/flights?q=${encodeURIComponent(`${departure} ${dest}`)}` },
     { l:'Skyscanner',     s:'Confronta voli',       h:`https://www.skyscanner.it/voli-per/${encodeURIComponent((dest||'').toLowerCase().replace(/ /g,'-'))}` },
-    { l:'Booking.com',    s:`Hotel a ${dest}`,      h:`https://www.booking.com/searchresults.html?ss=${encodeURIComponent(dest)}&group_adults=${adults}` },
+    { l:'Booking.com',    s:`Hotel a ${dest}`,      h:`https://www.booking.com/searchresults.html?ss=${encodeURIComponent(dest)}&group_adults=${adults}${bookingDates()}` },
     { l:'TripAdvisor',    s:'Ristoranti e attività',h:`https://www.tripadvisor.it/Search?q=${encodeURIComponent(dest)}` },
     { l:'Google Maps',    s:'Esplora',              h:`https://www.google.com/maps/search/${encodeURIComponent(`cose da fare ${dest}`)}` },
     { l:'Viator',         s:'Tour ed esperienze',   h:`https://www.viator.com/search/${encodeURIComponent(dest)}` },
@@ -1178,6 +1198,7 @@ export default function PlannerPage() {
                     {base.hotels.map((h, hi) => (
                 <HCard key={hi} h={h} bi={bi} city={base.city}
                   budget={budget}
+                  dates={bookingDates()}
                   selKeys={selKeys} setSelKeys={setSelKeys}
                   selNames={selNames} setSelNames={setSelNames}
                 />

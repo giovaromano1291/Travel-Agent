@@ -421,7 +421,7 @@ function HCard({ h, bi, city: cityName, budget, selKeys, setSelKeys, selNames, s
   const wh = h.why || h.perche || '';
   const ps = h.pros || [];
   const bs = h.best || false;
-  const ur = h.url || `https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}`;
+  const ur = h.url || `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(cityName)}`;
   const sk = `${bi}-${nm}`;
   const isSel = selKeys.includes(sk);
   function select() {
@@ -705,7 +705,7 @@ export default function PlannerPage() {
       `VINCOLO: tutti e 3 gli hotel devono appartenere alla fascia ${bdg}; il prezzo indicato deve essere coerente con quella fascia. Nomi propri reali, niente placeholder.\n` +
       `Per ognuno indica: prezzo a notte coerente con la fascia, zona, 3 pro. Il migliore qualita/prezzo ha best:true (uno solo).\n` +
       `Rispondi SOLO con JSON array di 3 oggetti, senza testo prima o dopo:\n` +
-      `[{"name":"Nome Hotel","stars":4,"zone":"quartiere","price":"euro150/notte","why":"perche sceglierlo","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}"}]`;
+      `[{"name":"Nome Hotel","stars":4,"zone":"quartiere","price":"euro150/notte","why":"perche sceglierlo","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/searchresults.html?ss=${encodeURIComponent(cityName)}"}]`;
     const txt = await callAI(msg, 900, null);
     if (!txt) return null;
     try {
@@ -735,7 +735,7 @@ export default function PlannerPage() {
       zone: 'centro', price: 'vedi Booking',
       why: `Hotel ${budget} disponibili a ${cityName}`,
       pros: ['prezzi aggiornati', 'recensioni reali', 'cancellazione gratuita'], best: true,
-      url: `https://www.booking.com/search.html?ss=${encodeURIComponent(cityName)}${starsQ}`,
+      url: `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(cityName)}${starsQ}`,
     }];
 
     // Lancio TUTTE le citta in parallelo: evita il timeout 25s del piano Hobby
@@ -786,7 +786,7 @@ export default function PlannerPage() {
         name: `Cerca hotel ${budget} a ${nb.city}`, stars: budget === 'luxury' ? 5 : 4,
         zone: 'centro', price: 'vedi Booking', why: nb.note || 'Hotel consigliato',
         pros: ['prezzi aggiornati', 'recensioni reali', 'cancellazione gratuita'], best: true,
-        url: `https://www.booking.com/search.html?ss=${encodeURIComponent(nb.city)}${starsQ}`,
+        url: `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(nb.city)}${starsQ}`,
       }];
       bases.push({ city: nb.city, days: nb.days, note: nb.note || '', hotels });
       setHotelBases(JSON.parse(JSON.stringify(bases)));
@@ -847,7 +847,8 @@ export default function PlannerPage() {
       `Formato giorni: ${formatStr}. Separa giorni con ---. Scrivi in italiano con ## per sezioni:\n` +
       `## PRESENTAZIONE DELLA DESTINAZIONE\n` +
       transportBlock +
-      `## ALLOGGIO\n${selStr}: zona e perche ottimale\nLINK https://www.booking.com/search.html?ss=${encodeURIComponent(dest)}\n` +
+      `## ALLOGGIO\n${selStr}: zona e perche ottimale\nLINK https://www.booking.com/searchresults.html?ss=${encodeURIComponent(dest)}\n` +
+      `IMPORTANTE sui link alloggio: usa SOLO link di ricerca Booking nel formato https://www.booking.com/searchresults.html?ss=NOME_CITTA. Non inventare mai URL di siti ufficiali di hotel ne link diretti a strutture, perche risultano inesistenti.\n` +
       `## ITINERARIO GIORNO PER GIORNO\nSEGUI ESATTAMENTE questa bozza approvata aggiungendo solo dettagli e link:\n${draftText.slice(0, 2500)}\n\nPer ogni attivita aggiungi: LINK url-biglietti${wantsFood ? ' e LINK url-ristorante' : ''}\n` +
       gdStr +
       `## ESPERIENZE LOCALI E CUCINA\n3-4 con LINK url\n` +
@@ -921,7 +922,7 @@ export default function PlannerPage() {
   const lks = [
     { l:'Google Flights', s:`Voli da ${departure}`, h:`https://www.google.com/travel/flights?q=${encodeURIComponent(`${departure} ${dest}`)}` },
     { l:'Skyscanner',     s:'Confronta voli',       h:`https://www.skyscanner.it/voli-per/${encodeURIComponent((dest||'').toLowerCase().replace(/ /g,'-'))}` },
-    { l:'Booking.com',    s:`Hotel a ${dest}`,      h:`https://www.booking.com/search.html?ss=${encodeURIComponent(dest)}&group_adults=${adults}` },
+    { l:'Booking.com',    s:`Hotel a ${dest}`,      h:`https://www.booking.com/searchresults.html?ss=${encodeURIComponent(dest)}&group_adults=${adults}` },
     { l:'TripAdvisor',    s:'Ristoranti e attività',h:`https://www.tripadvisor.it/Search?q=${encodeURIComponent(dest)}` },
     { l:'Google Maps',    s:'Esplora',              h:`https://www.google.com/maps/search/${encodeURIComponent(`cose da fare ${dest}`)}` },
     { l:'Viator',         s:'Tour ed esperienze',   h:`https://www.viator.com/search/${encodeURIComponent(dest)}` },

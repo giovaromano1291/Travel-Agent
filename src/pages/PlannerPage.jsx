@@ -93,7 +93,12 @@ function mdHtml(t) {
     .replace(/^POMERIGGIO$/gm, `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1.2rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Pomeriggio</span></div>`)
     .replace(/^SERA$/gm,       `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1.2rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Sera</span></div>`)
     .replace(/^---$/gm, `<div style='height:1px;background:#2a2a2a;margin:1.4rem 0'></div>`)
-    .replace(/^LINK (.+)$/gm, `<div style='margin:0.3rem 0 0.3rem 1rem;color:#6ab0ff;font-size:12px'>Prenota: $1</div>`)
+    .replace(/^LINK\s+(.+)$/gm, (_, rest) => {
+      const m = rest.match(/https?:\/\/[^\s)]+/);
+      const url = m ? m[0] : '';
+      if (!url) return `<div style='margin:0.3rem 0 0.3rem 1rem;color:#6ab0ff;font-size:12px'>Prenota: ${rest}</div>`;
+      return `<div style='margin:0.3rem 0 0.3rem 1rem;font-size:12px'><a href='${url}' target='_blank' rel='noopener noreferrer' style='color:#6ab0ff;text-decoration:none'>🔗 Prenota / Apri link</a></div>`;
+    })
     .replace(/^[*-] (.+)$/gm, (_, p1) => {
       const lb = p1.replace(/^([A-Za-z\u00c0-\u00ff\s]+:)\s*/, `<strong style='color:${GL};font-weight:600'>$1</strong> `);
       return `<div style='display:flex;align-items:flex-start;gap:8px;margin:0.35rem 0;color:#ccc;font-size:13px;line-height:1.6'><span style='color:${G};flex-shrink:0'>◆</span><span>${lb}</span></div>`;
@@ -441,7 +446,7 @@ function HCard({ h, bi, city: cityName, budget, selKeys, setSelKeys, selNames, s
           {ps.map((pf, pi) => <span key={pi} style={{ background:'#1a1a1a', border:'.5px solid #333', borderRadius:10, padding:'3px 9px', fontSize:11, color:'#bbb' }}>✓ {pf}</span>)}
         </div>
       )}
-      <a href={ur} target="_blank" rel="noreferrer" style={{ fontSize:11, color:'#6ab0ff', textDecoration:'none' }} onClick={e => e.stopPropagation()}>🔗 Prenota su Booking.com</a>
+      <a href={ur} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'#6ab0ff', textDecoration:'none' }} onClick={e => e.stopPropagation()}>🔗 Prenota su Booking.com</a>
     </div>
   );
 }
@@ -528,7 +533,14 @@ export default function PlannerPage() {
     return `${b}${k} - ${travType}`;
   }
 
-  function goBack() { if (step > 1) setStep(s => s - 1); }
+  function goBack() {
+    if (step <= 1) return;
+    const target = step - 1;
+    // Tornando allo step 12 (Guide) resetto la scelta a null: cosi ricompaiono
+    // i pulsanti Si/No e l'utente puo ri-scegliere e riavanzare.
+    if (target === 12) setGuide(null);
+    setStep(target);
+  }
 
   /* ── save to Supabase ── */
   async function saveItinerary() {
@@ -1381,7 +1393,7 @@ export default function PlannerPage() {
                   <div className="p-stit">Prenota e Esplora</div>
                   <div className="p-lgrid">
                     {lks.map(lc => (
-                      <a key={lc.l} className="p-lcard" href={lc.h} target="_blank" rel="noreferrer">
+                      <a key={lc.l} className="p-lcard" href={lc.h} target="_blank" rel="noopener noreferrer">
                         <div>
                           <div style={{ fontSize:12, color:GL, fontWeight:500 }}>{lc.l}</div>
                           <div style={{ fontSize:11, color:'#666', marginTop:2 }}>{lc.s}</div>

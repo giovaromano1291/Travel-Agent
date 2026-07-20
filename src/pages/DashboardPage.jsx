@@ -163,7 +163,7 @@ export default function DashboardPage() {
 
           <div className="welcome">
             <div className="welcome-sub">✦ Il tuo profilo</div>
-            <div className="welcome-title">Bentornato, {userName.split(' ')[0]}.</div>
+            <div className="welcome-title">Bentornato/a, {userName.split(' ')[0]}.</div>
             <div className="welcome-hint">Qui trovi tutti i tuoi itinerari salvati.</div>
           </div>
 

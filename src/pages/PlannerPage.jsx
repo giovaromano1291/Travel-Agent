@@ -504,6 +504,7 @@ export default function PlannerPage() {
   /* ── transport ── */
   const [transport, setTransport]   = useState(null);
   const [distClose, setDistClose]   = useState(null);
+  const [lang, setLang]             = useState('it');
 
   /* ── AI text ── */
   const [aiPer, setAiPer]         = useState(''); const [aiPerLoad, setAiPerLoad] = useState(false);
@@ -553,6 +554,10 @@ export default function PlannerPage() {
   }, [draftLoad]);
 
   /* ── helpers ── */
+  // Nome della lingua attiva, usato nei prompt AI (Fase 1: IT + EN)
+  const LANGS_MAP = { it: 'italiano', en: 'inglese' };
+  function langName() { return LANGS_MAP[lang] || 'italiano'; }
+
   // Parametri date per Booking: aggiunti SOLO se l'utente ha scelto date esatte
   // dal calendario (startDate + endDate). Con mese/stagione restituisce '' (nessuna data).
   function bookingDates() {
@@ -690,7 +695,7 @@ export default function PlannerPage() {
     if (!inp.trim()) return;
     const d = inp.trim(); setDest(d); setInp(''); setAiPerLoad(true); setStep(2);
     await callAI(
-      `In 3-4 righe in italiano, i periodi migliori per visitare ${d} nel ${CY} o ${CY+1} (clima, eventi, affluenza). Usa bullet -.`,
+      `In 3-4 righe in ${langName()}, i periodi migliori per visitare ${d} nel ${CY} o ${CY+1} (clima, eventi, affluenza). Usa bullet -.`,
       600, t => setAiPer(t)
     );
     setAiPerLoad(false);
@@ -719,7 +724,7 @@ export default function PlannerPage() {
       `Crea un piano visivo dell'itinerario per: ${dest}, ${period} ${y}, ${duration}${duration.includes('Weekend') ? ' (solo 2-3 giorni, max 2 destinazioni vicine)' : ''}, ${style}, ${trav()}, budget ${budget}.\n\n` +
       `REGOLA CRITICA SUL TIPO:\n- Usa [QUARTIERE] se ${dest} e una SINGOLA CITTA\n- Usa [CITTA] SOLO se l'itinerario tocca piu CITTA DIVERSE\n- Quartieri, arrondissement, zone di una stessa citta = SEMPRE [QUARTIERE]\n\n` +
       `FORMATO OBBLIGATORIO per ogni blocco:\n### NOME (N giorni) [TIPO]\n- **Cosa vedere**: luogo - perche\n- **Cosa fare**: attivita - descrizione\n- **Da non perdere**: esperienza - perche\n\n` +
-      `REGOLE:\n1. Solo ### per i titoli\n2. Niente tabelle\n3. Inizia subito col primo ###\n4. La somma dei giorni deve corrispondere a: ${duration}\n5. Scrivi in italiano\n6. OGNI citta/tappa deve avere il PROPRIO titolo ### su una riga separata; non unire mai due localita nello stesso blocco e non attaccare un nuovo titolo alla fine di un bullet\n7. Dopo ogni blocco lascia una riga vuota prima del ### successivo\n\n` +
+      `REGOLE:\n1. Solo ### per i titoli\n2. Niente tabelle\n3. Inizia subito col primo ###\n4. La somma dei giorni deve corrispondere a: ${duration}\n5. Scrivi in ${langName()}\n6. OGNI citta/tappa deve avere il PROPRIO titolo ### su una riga separata; non unire mai due localita nello stesso blocco e non attaccare un nuovo titolo alla fine di un bullet\n7. Dopo ogni blocco lascia una riga vuota prima del ### successivo\n\n` +
       `ESEMPIO singola citta (Parigi, 5gg):\n### LOUVRE & MARAIS (2 giorni) [QUARTIERE]\n- **Cosa vedere**: Museo del Louvre\n### MONTMARTRE (1 giorno) [QUARTIERE]\n### EIFFEL & SAINT-GERMAIN (2 giorni) [QUARTIERE]\n\n` +
       `ESEMPIO piu citta (Costa Azzurra, 7gg):\n### NIZZA (3 giorni) [CITTA]\n### MONACO (2 giorni) [CITTA]\n### CANNES (2 giorni) [CITTA]` +
       dropRouteHint(dep, dest, transport, 'brief');
@@ -734,7 +739,7 @@ export default function PlannerPage() {
       `Piano originale per ${dest} (${period} ${y}):\n${planText}\n\n` +
       `L'utente ha richiesto una o PIU modifiche nel testo seguente. Identifica OGNI singola richiesta (aggiunte, rimozioni, escursioni in giornata, cambi di tappa) e applicale TUTTE, senza tralasciarne nessuna:\n"${mods}"\n\n` +
       `Rielabora con STESSO FORMATO: ### NOME (N giorni) [TIPO]\n- **Cosa vedere/fare/da non perdere**\n` +
-      `REGOLE: solo ###, niente tabelle, somma giorni = ${duration}. OGNI citta ha il proprio titolo ### su riga separata, non unire mai due localita nello stesso blocco. Le escursioni in giornata vanno indicate nella tappa/base da cui partono. Applica TUTTE le modifiche richieste. Scrivi in italiano.` +
+      `REGOLE: solo ###, niente tabelle, somma giorni = ${duration}. OGNI citta ha il proprio titolo ### su riga separata, non unire mai due localita nello stesso blocco. Le escursioni in giornata vanno indicate nella tappa/base da cui partono. Applica TUTTE le modifiche richieste. Scrivi in ${langName()}.` +
       dropRouteHint(departure, dest, transport, 'brief');
     await callAI(msg, 2000, t => setRevText(t));
     setRevLoad(false);
@@ -888,7 +893,7 @@ export default function PlannerPage() {
       `FORMATO OBBLIGATORIO:\n\n**Giorno 1 - Titolo**\n\nMATTINA\n- Attivita 1 (tempo)\n- Attivita 2 (tempo)\n\nPOMERIGGIO\n- Attivita 1\n\nSERA\n- Attivita 1\n\n---\n\n` +
       `REGOLE: MATTINA/POMERIGGIO/SERA su riga isolata maiuscolo. Ogni attivita inizia con - su riga separata. Riga vuota tra sezioni.\n\n` +
       `## LOGISTICA GENERALE\nOGNI punto su riga separata con -:\n- Trasporti: ...\n- Pagamenti: ...\n- App utili: ...\n- Prenotazioni: ...\n- Budget: ...\n` +
-      `Scrivi in italiano.` +
+      `Scrivi in ${langName()}.` +
       dropRouteHint(departure, dest, transport, 'detailed');
     await callAI(msg, 8000, t => setDraftText(t));
     setDraftLoad(false);
@@ -901,7 +906,7 @@ export default function PlannerPage() {
       `Suggerisci ristoranti per ogni giorno a ${dest} (${period} ${y}), budget ${budget}, ${trav()}, alloggio ${selStr}.\n` +
       `## PREZZI MEDI A ${dest.toUpperCase()}\n(costo medio a persona per tipologia)\n` +
       `## DOVE MANGIARE - GIORNO PER GIORNO\nPer ogni giorno: pranzo e cena con nome locale, tipo, zona, prezzo, specialita. LINK url\n` +
-      `## ESPERIENZE CULINARIE DA NON PERDERE\n3-4 esperienze con LINK url. Scrivi in italiano.`;
+      `## ESPERIENZE CULINARIE DA NON PERDERE\n3-4 esperienze con LINK url. Scrivi in ${langName()}.`;
     await callAI(msg, 3000, t => setFoodText(t));
     setFoodLoad(false);
   }
@@ -934,7 +939,7 @@ export default function PlannerPage() {
       : `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(dest)}${bookingDates()}`;
     const msg =
       `Itinerario completo per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, ${trav()}, partenza ${departure}, alloggio ${selStr}.\n` +
-      `Formato giorni: ${formatStr}. Separa giorni con ---. Scrivi in italiano con ## per sezioni:\n` +
+      `Formato giorni: ${formatStr}. Separa giorni con ---. Scrivi in ${langName()} con ## per sezioni:\n` +
       `## PRESENTAZIONE DELLA DESTINAZIONE\n` +
       transportBlock +
       `## ALLOGGIO\n${selStr}: zona e perche ottimale\nLINK ${hotelSearch}\n` +
@@ -1025,6 +1030,19 @@ export default function PlannerPage() {
     <>
       <style>{CSS}</style>
       <div className="planner-wrap">
+
+        {/* Selettore lingua (in alto a destra) */}
+        <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:4 }}>
+          <select
+            value={lang}
+            onChange={e => setLang(e.target.value)}
+            style={{ background:'#111', color:GL, border:`.5px solid ${BRD}`, borderRadius:8, padding:'6px 10px', fontSize:13, fontFamily:'Inter,sans-serif', cursor:'pointer' }}
+            aria-label="Lingua"
+          >
+            <option value="it">🇮🇹 Italiano</option>
+            <option value="en">🇬🇧 English</option>
+          </select>
+        </div>
 
         {/* Header */}
         <div className="p-logo">

@@ -238,22 +238,38 @@ function haversine([lat1,lon1],[lat2,lon2]) {
 /* ─── Ottimizzazione geografica "a goccia" (viaggio in auto) ───────────── */
 function isCarTransport(transport) {
   const t = (transport || '').toLowerCase();
-  return t.includes('auto') || t.includes('noleggio');
+  return t.includes('auto') || t.includes('noleggio') || t.includes('moto') || t.includes('camper');
 }
 
 /* Testo da iniettare nei prompt AI quando il viaggio è in auto:
    percorso ottimizzato "a goccia" — prima le mete più lontane dalla partenza,
    poi progressivamente quelle sulla via del ritorno. */
-function dropRouteHint(departure, dest, transport) {
+function dropRouteHint(departure, dest, transport, mode) {
   if (!isCarTransport(transport)) return '';
+  const t = (transport || '').toLowerCase();
+  const detailed = mode === 'detailed';
+  // Sfumatura specifica per tipo di mezzo su gomma
+  let stile = '';
+  if (t.includes('moto')) {
+    stile = `Chi viaggia in MOTO ama guidare: privilegia strade panoramiche, tornanti e passi suggestivi, e ama fermarsi in luoghi meno turistici lungo il tragitto.`;
+  } else if (t.includes('camper')) {
+    stile = `Chi viaggia in CAMPER si sposta lentamente e sosta spesso: privilegia tappe con aree sosta/campeggi vicini, natura e borghi accessibili (evita centri storici difficili in camper).`;
+  } else {
+    stile = `Chi viaggia in ${transport} può fermarsi lungo il tragitto per scoprire luoghi meno turistici.`;
+  }
+  const tappe = detailed
+    // Itinerario finale: dettaglia cosa fare/vedere nelle tappe intermedie
+    ? `Per ogni tappa intermedia lungo il percorso, DETTAGLIA cosa vedere e fare (attività, tempi, motivi della sosta), come per le mete principali.`
+    // Piano step 8: solo una riga sintetica e invogliante per ogni tappa intermedia
+    : `Suggerisci 1-2 tappe intermedie tra le mete principali con UNA sola riga sintetica e invogliante ciascuna, nel formato "Tappa intermedia a NOME: breve motivo della sosta" (es. "Tappa intermedia a Montefalco: degustazione in cantina lungo il percorso"). NON dettagliare oltre: il dettaglio verrà dopo.`;
   return (
-    `\n\nOTTIMIZZAZIONE GEOGRAFICA (viaggio in ${transport} da ${departure}):\n` +
-    `L'utente viaggia in auto e torna al punto di partenza. Ordina le tappe con la logica del "percorso a goccia":\n` +
+    `\n\nVIAGGIO SU STRADA in ${transport} da ${departure}:\n` +
+    stile + `\n` + tappe + `\n` +
+    `Ordina le tappe con la logica del "percorso a goccia":\n` +
     `1. Raggiungi PRIMA la meta più LONTANA da ${departure}.\n` +
     `2. Prosegui verso le tappe intermedie lungo il percorso di ritorno.\n` +
     `3. Le ultime tappe devono essere quelle più VICINE a ${departure}.\n` +
-    `Esempio: partenza Roma, Umbria → Spoleto (più lontano) → Assisi → Perugia → Orvieto (già verso Roma).\n` +
-    `Applica questa logica geografica all'ordine delle tappe.`
+    `Esempio: partenza Roma, Umbria → Spoleto (più lontano) → Assisi → Perugia → Orvieto (già verso Roma).`
   );
 }
 
@@ -648,13 +664,19 @@ export default function PlannerPage() {
       dstLower.includes(place) || place.includes(dstLower)
     );
     if (!isNear) { setDistClose(false); return; }
-    // La destinazione e potenzialmente vicina: calcolo la distanza reale partenza->destinazione.
+    // La destinazione e potenzialmente vicina (Europa/Mediterraneo). Il discriminante e la PARTENZA.
     const c1 = getCoords(dep), c2 = getCoords(dst);
-    // Offro l'auto SOLO se ho entrambe le coordinate E la distanza e sotto soglia.
-    // Se manca una coordinata (es. partenza da un altro continente) NON offro l'auto.
+    // Riquadro geografico Europa/Mediterraneo: lat 34..72, lon -25..45
+    const isEuropeanCoord = (c) => c && c[0] >= 34 && c[0] <= 72 && c[1] >= -25 && c[1] <= 45;
     if (c1 && c2) {
+      // Coordinate di entrambe note: uso la distanza reale.
       setDistClose(haversine(c1, c2) < 1200);
+    } else if (isEuropeanCoord(c1)) {
+      // Solo la partenza e nota ed e europea (es. destinazione-regione tipo "Umbria"
+      // senza coordinate): viaggio interno all'Europa, offro il mezzo.
+      setDistClose(true);
     } else {
+      // Partenza sconosciuta o fuori Europa (es. New York): non offro l'auto.
       setDistClose(false);
     }
   }
@@ -689,7 +711,6 @@ export default function PlannerPage() {
   async function genPlan(dep) {
     setStep(8); setPlanLoad(true); setPlanText('');
     const y = detectYear(period); setTripYear(y);
-    checkDistance(dep, dest);
     const msg =
       `Crea un piano visivo dell'itinerario per: ${dest}, ${period} ${y}, ${duration}${duration.includes('Weekend') ? ' (solo 2-3 giorni, max 2 destinazioni vicine)' : ''}, ${style}, ${trav()}, budget ${budget}.\n\n` +
       `REGOLA CRITICA SUL TIPO:\n- Usa [QUARTIERE] se ${dest} e una SINGOLA CITTA\n- Usa [CITTA] SOLO se l'itinerario tocca piu CITTA DIVERSE\n- Quartieri, arrondissement, zone di una stessa citta = SEMPRE [QUARTIERE]\n\n` +
@@ -697,7 +718,7 @@ export default function PlannerPage() {
       `REGOLE:\n1. Solo ### per i titoli\n2. Niente tabelle\n3. Inizia subito col primo ###\n4. La somma dei giorni deve corrispondere a: ${duration}\n5. Scrivi in italiano\n6. OGNI citta/tappa deve avere il PROPRIO titolo ### su una riga separata; non unire mai due localita nello stesso blocco e non attaccare un nuovo titolo alla fine di un bullet\n7. Dopo ogni blocco lascia una riga vuota prima del ### successivo\n\n` +
       `ESEMPIO singola citta (Parigi, 5gg):\n### LOUVRE & MARAIS (2 giorni) [QUARTIERE]\n- **Cosa vedere**: Museo del Louvre\n### MONTMARTRE (1 giorno) [QUARTIERE]\n### EIFFEL & SAINT-GERMAIN (2 giorni) [QUARTIERE]\n\n` +
       `ESEMPIO piu citta (Costa Azzurra, 7gg):\n### NIZZA (3 giorni) [CITTA]\n### MONACO (2 giorni) [CITTA]\n### CANNES (2 giorni) [CITTA]` +
-      dropRouteHint(dep, dest, transport);
+      dropRouteHint(dep, dest, transport, 'brief');
     await callAI(msg, 1800, t => setPlanText(t));
     setPlanLoad(false);
   }
@@ -710,7 +731,7 @@ export default function PlannerPage() {
       `L'utente ha richiesto una o PIU modifiche nel testo seguente. Identifica OGNI singola richiesta (aggiunte, rimozioni, escursioni in giornata, cambi di tappa) e applicale TUTTE, senza tralasciarne nessuna:\n"${mods}"\n\n` +
       `Rielabora con STESSO FORMATO: ### NOME (N giorni) [TIPO]\n- **Cosa vedere/fare/da non perdere**\n` +
       `REGOLE: solo ###, niente tabelle, somma giorni = ${duration}. OGNI citta ha il proprio titolo ### su riga separata, non unire mai due localita nello stesso blocco. Le escursioni in giornata vanno indicate nella tappa/base da cui partono. Applica TUTTE le modifiche richieste. Scrivi in italiano.` +
-      dropRouteHint(departure, dest, transport);
+      dropRouteHint(departure, dest, transport, 'brief');
     await callAI(msg, 2000, t => setRevText(t));
     setRevLoad(false);
   }
@@ -864,7 +885,7 @@ export default function PlannerPage() {
       `REGOLE: MATTINA/POMERIGGIO/SERA su riga isolata maiuscolo. Ogni attivita inizia con - su riga separata. Riga vuota tra sezioni.\n\n` +
       `## LOGISTICA GENERALE\nOGNI punto su riga separata con -:\n- Trasporti: ...\n- Pagamenti: ...\n- App utili: ...\n- Prenotazioni: ...\n- Budget: ...\n` +
       `Scrivi in italiano.` +
-      dropRouteHint(departure, dest, transport);
+      dropRouteHint(departure, dest, transport, 'detailed');
     await callAI(msg, 8000, t => setDraftText(t));
     setDraftLoad(false);
   }
@@ -918,7 +939,7 @@ export default function PlannerPage() {
       gdStr +
       `## ESPERIENZE LOCALI E CUCINA\n3-4 con LINK url\n` +
       `## CONSIGLI PRATICI\n- Trasporti\n- Pagamenti\n- App utili\n- Visto\n- Valigia` +
-      dropRouteHint(departure, dest, transport);
+      dropRouteHint(departure, dest, transport, 'detailed');
     try { await callAI(msg, 8000, t => setFinText(t)); }
     catch (e) { setFinText(`Errore: ${e.message}`); }
     setFinLoad(false);
@@ -1160,17 +1181,16 @@ export default function PlannerPage() {
             <ABox text={planText} loading={planLoad} lt="Analizzo la destinazione..." />
             {!planLoad && planText && (
               <div>
-                {distClose === true && transport === null && (
-                  <div style={{ background:'#111', border:`.5px solid ${G}`, borderRadius:12, padding:'1.2rem 1.4rem', margin:'1rem 0' }}>
-                    <div style={{ fontSize:13, color:GL, fontWeight:600, marginBottom:8 }}>Come vuoi raggiungere {dest}?</div>
-                    <div style={{ fontSize:12, color:'#888', marginBottom:12 }}>La destinazione è raggiungibile anche senza volare</div>
-                    <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-                      {['Auto propria','Auto a noleggio','Treno','Bus','Aereo'].map(opt => (
-                        <div key={opt} className="p-chip" onClick={() => setTransport(opt)}>{opt}</div>
-                      ))}
-                    </div>
+                {/* Scelta del mezzo: sempre mostrata e OBBLIGATORIA prima di proseguire */}
+                <div style={{ background:'#111', border:`.5px solid ${transport ? G : '#333'}`, borderRadius:12, padding:'1.2rem 1.4rem', margin:'1rem 0' }}>
+                  <div style={{ fontSize:13, color:GL, fontWeight:600, marginBottom:8 }}>Come vuoi raggiungere {dest}?</div>
+                  <div style={{ fontSize:12, color:'#888', marginBottom:12 }}>Scegli il mezzo con cui vuoi viaggiare</div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                    {['Auto propria','Auto a noleggio','Moto','Camper','Treno','Bus','Aereo'].map(opt => (
+                      <div key={opt} className={'p-chip' + (transport === opt ? ' sel' : '')} onClick={() => setTransport(opt)}>{opt}</div>
+                    ))}
                   </div>
-                )}
+                </div>
                 {transport !== null && (
                   <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#1a1400', border:`.5px solid ${G}`, borderRadius:20, padding:'4px 12px', fontSize:12, color:GL, marginBottom:8 }}>
                     {transport} selezionato
@@ -1178,8 +1198,15 @@ export default function PlannerPage() {
                 )}
                 <div style={{ fontSize:13, color:'#888', margin:'1rem 0 .5rem' }}>Vuoi aggiungere o modificare qualcosa?</div>
                 <textarea className="p-ta" placeholder="Es. Aggiungi Venezia, voglio una notte in glamping..." value={mods} onChange={e => setMods(e.target.value)} />
+                {!transport && (
+                  <div style={{ fontSize:12, color:'#e8a24c', margin:'.5rem 0 0' }}>Seleziona un mezzo di trasporto per proseguire</div>
+                )}
                 <div className="p-brow">
-                  <Btn label={mods.trim() ? 'Rielabora →' : 'Vai agli alloggi →'} onClick={() => { if (mods.trim()) genRevised(); else genHotels(false); }} />
+                  <Btn
+                    label={mods.trim() ? 'Rielabora →' : 'Vai agli alloggi →'}
+                    disabled={!transport}
+                    onClick={() => { if (!transport) return; if (mods.trim()) genRevised(); else genHotels(false); }}
+                  />
                 </div>
               </div>
             )}

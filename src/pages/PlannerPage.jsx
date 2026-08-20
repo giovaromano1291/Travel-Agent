@@ -1166,9 +1166,44 @@ export default function PlannerPage() {
             <div className="p-ir">
               <input className="p-inp" placeholder="Es. Milano, Roma..." value={inp}
                 onChange={e => setInp(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && inp.trim()) { const d = inp.trim(); setDeparture(d); setInp(''); genPlan(d); } }} />
-              <button className="p-go" onClick={() => { if (inp.trim()) { const d = inp.trim(); setDeparture(d); setInp(''); genPlan(d); } }}>›</button>
+                onKeyDown={e => { if (e.key === 'Enter' && inp.trim()) { setDeparture(inp.trim()); } }} />
+              <button className="p-go" onClick={() => { if (inp.trim()) setDeparture(inp.trim()); }}>›</button>
             </div>
+
+            {/* Conferma citta salvata */}
+            {departure && (
+              <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#1a1400', border:`.5px solid ${G}`, borderRadius:20, padding:'4px 12px', fontSize:12, color:GL, marginTop:12 }}>
+                Partenza da {departure}
+              </div>
+            )}
+
+            {/* Selettore mezzo: appare dopo aver indicato la partenza */}
+            {departure && (
+              <div style={{ background:'#111', border:`.5px solid ${transport ? G : '#333'}`, borderRadius:12, padding:'1.2rem 1.4rem', marginTop:'1.2rem' }}>
+                <div style={{ fontSize:13, color:GL, fontWeight:600, marginBottom:8 }}>Con che mezzo vuoi viaggiare?</div>
+                <div style={{ fontSize:12, color:'#888', marginBottom:12 }}>Il mezzo scelto influenzerà l'itinerario (soste, tappe intermedie...)</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                  {['Auto propria','Auto a noleggio','Moto','Camper','Treno','Bus','Aereo'].map(opt => (
+                    <div key={opt} className={'p-chip' + (transport === opt ? ' sel' : '')} onClick={() => setTransport(opt)}>{opt}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Genera il piano: attivo solo con partenza + mezzo scelti */}
+            {departure && (
+              <>
+                {!transport && (
+                  <div style={{ fontSize:12, color:'#e8a24c', margin:'.8rem 0 0' }}>Seleziona un mezzo di trasporto per continuare</div>
+                )}
+                <Btn
+                  label="Genera il piano →"
+                  disabled={!transport}
+                  style={{ marginTop:12 }}
+                  onClick={() => { if (transport) genPlan(departure); }}
+                />
+              </>
+            )}
           </div>
         )}
 
@@ -1181,31 +1216,18 @@ export default function PlannerPage() {
             <ABox text={planText} loading={planLoad} lt="Analizzo la destinazione..." />
             {!planLoad && planText && (
               <div>
-                {/* Scelta del mezzo: sempre mostrata e OBBLIGATORIA prima di proseguire */}
-                <div style={{ background:'#111', border:`.5px solid ${transport ? G : '#333'}`, borderRadius:12, padding:'1.2rem 1.4rem', margin:'1rem 0' }}>
-                  <div style={{ fontSize:13, color:GL, fontWeight:600, marginBottom:8 }}>Come vuoi raggiungere {dest}?</div>
-                  <div style={{ fontSize:12, color:'#888', marginBottom:12 }}>Scegli il mezzo con cui vuoi viaggiare</div>
-                  <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-                    {['Auto propria','Auto a noleggio','Moto','Camper','Treno','Bus','Aereo'].map(opt => (
-                      <div key={opt} className={'p-chip' + (transport === opt ? ' sel' : '')} onClick={() => setTransport(opt)}>{opt}</div>
-                    ))}
-                  </div>
-                </div>
-                {transport !== null && (
-                  <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#1a1400', border:`.5px solid ${G}`, borderRadius:20, padding:'4px 12px', fontSize:12, color:GL, marginBottom:8 }}>
-                    {transport} selezionato
+                {/* Promemoria del mezzo gia scelto allo step 7 */}
+                {transport && (
+                  <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#1a1400', border:`.5px solid ${G}`, borderRadius:20, padding:'4px 12px', fontSize:12, color:GL, margin:'1rem 0 0' }}>
+                    🧭 Viaggio in {transport}
                   </div>
                 )}
                 <div style={{ fontSize:13, color:'#888', margin:'1rem 0 .5rem' }}>Vuoi aggiungere o modificare qualcosa?</div>
                 <textarea className="p-ta" placeholder="Es. Aggiungi Venezia, voglio una notte in glamping..." value={mods} onChange={e => setMods(e.target.value)} />
-                {!transport && (
-                  <div style={{ fontSize:12, color:'#e8a24c', margin:'.5rem 0 0' }}>Seleziona un mezzo di trasporto per proseguire</div>
-                )}
                 <div className="p-brow">
                   <Btn
                     label={mods.trim() ? 'Rielabora →' : 'Vai agli alloggi →'}
-                    disabled={!transport}
-                    onClick={() => { if (!transport) return; if (mods.trim()) genRevised(); else genHotels(false); }}
+                    onClick={() => { if (mods.trim()) genRevised(); else genHotels(false); }}
                   />
                 </div>
               </div>

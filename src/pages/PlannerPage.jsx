@@ -555,28 +555,69 @@ export default function PlannerPage() {
     setStep(target);
   }
 
+  /* ── download PDF via stampa del browser (nessuna dipendenza) ── */
+  function downloadPDF() {
+    if (!finText) return;
+    const titolo = `${dest ? dest.charAt(0).toUpperCase() + dest.slice(1) : dest} ${tripYear}`;
+    const meta = metaTags.join(' · ');
+    const corpo = mdHtml(finText);
+    const win = window.open('', '_blank');
+    if (!win) { alert('Abilita i popup per scaricare il PDF.'); return; }
+    win.document.write(`<!DOCTYPE html><html lang="it"><head><meta charset="utf-8">
+      <title>Itinerario ${titolo}</title>
+      <style>
+        @page { margin: 1.5cm; }
+        body { font-family: Georgia, 'Times New Roman', serif; color: #1a1a1a; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }
+        h1 { font-size: 26px; color: #9a7b1f; border-bottom: 2px solid #C9A84C; padding-bottom: 8px; margin-bottom: 4px; }
+        .meta { font-size: 12px; color: #666; margin-bottom: 24px; }
+        a { color: #1a5fb4; text-decoration: none; word-break: break-all; }
+        div { margin: 4px 0; }
+        strong { color: #9a7b1f; }
+        @media print { a { color: #1a5fb4 !important; } }
+      </style></head><body>
+      <h1>${titolo}</h1>
+      <div class="meta">${meta}</div>
+      <div>${corpo}</div>
+      </body></html>`);
+    win.document.close();
+    win.focus();
+    // Piccolo delay per far renderizzare il contenuto prima della stampa
+    setTimeout(() => { win.print(); }, 400);
+  }
+
   /* ── save to Supabase ── */
   async function saveItinerary() {
     if (!user) { setSaveStatus('Accedi per salvare'); return; }
+    if (!dest || !finText) { setSaveStatus('❌ Itinerario non ancora completo'); return; }
     setSaveStatus('Salvataggio...');
-    const { error } = await supabase.from('itineraries').insert({
-      user_id:        user.id,
-      destination:    dest,
-      period,
-      trip_year:      tripYear,
-      duration,
-      style,
-      budget,
-      departure,
-      trav_type:      travType,
-      adults,
-      children,
-      hotels:         selStr,
-      itinerary_text: finText,
-      food_text:      foodText,
-    });
-    setSaveStatus(error ? '❌ Errore nel salvataggio' : '✅ Itinerario salvato!');
-    setTimeout(() => setSaveStatus(''), 4000);
+    try {
+      const { error } = await supabase.from('itineraries').insert({
+        user_id:        user.id,
+        destination:    dest,
+        period,
+        trip_year:      tripYear,
+        duration,
+        style,
+        budget,
+        departure,
+        trav_type:      travType,
+        adults,
+        children,
+        hotels:         selStr,
+        itinerary_text: finText,
+        food_text:      foodText,
+      });
+      if (error) {
+        console.error('Errore salvataggio Supabase:', error);
+        setSaveStatus('❌ ' + (error.message || 'Errore nel salvataggio'));
+      } else {
+        setSaveStatus('✅ Itinerario salvato!');
+        setTimeout(() => setSaveStatus(''), 4000);
+      }
+    } catch (e) {
+      console.error('Eccezione salvataggio:', e);
+      setSaveStatus('❌ ' + (e.message || 'Errore imprevisto'));
+    }
   }
 
   /* ── distance check ── */
@@ -1406,6 +1447,14 @@ export default function PlannerPage() {
                       {saveStatus && <span style={{ fontSize:12, color: saveStatus.startsWith('✅') ? GL : '#f88' }}>{saveStatus}</span>}
                     </div>
                   )}
+
+                  {/* Download PDF (sempre disponibile, anche senza login) */}
+                  <div style={{ margin:'0.5rem 0 1rem', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                    <button
+                      onClick={downloadPDF}
+                      style={{ background:'transparent', color:G, border:`.5px solid ${G}`, borderRadius:10, padding:'10px 20px', fontSize:13, fontFamily:'Inter,sans-serif', cursor:'pointer', fontWeight:600 }}
+                    >📄 Scarica PDF</button>
+                  </div>
 
                   <div className="p-stit">Galleria</div>
                   <div className="p-igrid">

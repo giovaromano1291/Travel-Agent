@@ -647,9 +647,13 @@ export default function PlannerPage() {
     const isNear = NEAR_DESTINATIONS.some(place =>
       dstLower.includes(place) || place.includes(dstLower)
     );
-    if (isNear) {
-      const c1 = getCoords(dep), c2 = getCoords(dst);
-      setDistClose(c1 && c2 ? haversine(c1, c2) < 1200 : true);
+    if (!isNear) { setDistClose(false); return; }
+    // La destinazione e potenzialmente vicina: calcolo la distanza reale partenza->destinazione.
+    const c1 = getCoords(dep), c2 = getCoords(dst);
+    // Offro l'auto SOLO se ho entrambe le coordinate E la distanza e sotto soglia.
+    // Se manca una coordinata (es. partenza da un altro continente) NON offro l'auto.
+    if (c1 && c2) {
+      setDistClose(haversine(c1, c2) < 1200);
     } else {
       setDistClose(false);
     }
@@ -703,9 +707,9 @@ export default function PlannerPage() {
     const y = tripYear || detectYear(period);
     const msg =
       `Piano originale per ${dest} (${period} ${y}):\n${planText}\n\n` +
-      `Modifiche richieste: ${mods}\n\n` +
+      `L'utente ha richiesto una o PIU modifiche nel testo seguente. Identifica OGNI singola richiesta (aggiunte, rimozioni, escursioni in giornata, cambi di tappa) e applicale TUTTE, senza tralasciarne nessuna:\n"${mods}"\n\n` +
       `Rielabora con STESSO FORMATO: ### NOME (N giorni) [TIPO]\n- **Cosa vedere/fare/da non perdere**\n` +
-      `REGOLE: solo ###, niente tabelle, somma giorni = ${duration}. OGNI citta ha il proprio titolo ### su riga separata, non unire mai due localita nello stesso blocco. Scrivi in italiano.` +
+      `REGOLE: solo ###, niente tabelle, somma giorni = ${duration}. OGNI citta ha il proprio titolo ### su riga separata, non unire mai due localita nello stesso blocco. Le escursioni in giornata vanno indicate nella tappa/base da cui partono. Applica TUTTE le modifiche richieste. Scrivi in italiano.` +
       dropRouteHint(departure, dest, transport);
     await callAI(msg, 2000, t => setRevText(t));
     setRevLoad(false);

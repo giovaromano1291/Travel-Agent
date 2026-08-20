@@ -83,12 +83,16 @@ function mdHtml(t) {
   t = t.replace(/([.!?])\s+(Trasporti|Pagamenti|App utili|Prenotazioni|Budget|App|Visto|Valigia):/g, '$1\n- $2:');
   t = t.replace(/\n{3,}/g, '\n\n');
   return t
+    .replace(/^\s*\*{0,2}\s*(Giorno\s*\d+[^\n]*?)\s*\*{0,2}\s*$/gim, (m, inner) => {
+      const clean = inner.replace(/\*\*/g, '').trim();
+      if (/^(MATTINA|POMERIGGIO|SERA)/i.test(clean)) return m;
+      return `<div style='color:${GL};font-weight:700;margin-top:1.8rem;font-size:15px;border-top:0.5px solid #2a2a2a;padding-top:1.2rem;display:block'>${clean}</div>`;
+    })
     .replace(/\*\*(.*?)\*\*/g, `<strong style='color:${GL};font-weight:500'>$1</strong>`)
     .replace(/\*([^*\n]+?)\*/g, `<em style='color:#bbb;font-style:italic'>$1</em>`)
     .replace(/^([A-Z][A-ZÀÈÉÌÒÙ\s&'"-]+:[^\n]+\[(?:QUARTIERE|CIT))/gm, '### $1')
     .replace(/^### (.+)$/gm, `<div style='display:flex;align-items:center;gap:10px;margin:1.6rem 0 0.8rem;padding:10px 14px;background:linear-gradient(90deg,#1a1400,transparent);border-left:3px solid ${G};border-radius:0 8px 8px 0'><span style='font-family:Cormorant Garamond,serif;font-size:16px;font-weight:600;color:${GL}'>$1</span></div>`)
     .replace(/^## (.+)$/gm, `<div style='font-size:11px;letter-spacing:2px;color:${G};text-transform:uppercase;margin:1.4rem 0 0.6rem;border-top:0.5px solid #2a2a2a;padding-top:1rem;font-weight:600'>$1</div>`)
-    .replace(/^(Giorno \d+(?:(?!MATTINA|POMERIGGIO|SERA).)+)$/gm, `<div style='color:${GL};font-weight:700;margin-top:1.8rem;font-size:15px;border-top:0.5px solid #2a2a2a;padding-top:1.2rem;display:block'>$1</div>`)
     .replace(/^MATTINA$/gm,    `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Mattina</span></div>`)
     .replace(/^POMERIGGIO$/gm, `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1.2rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Pomeriggio</span></div>`)
     .replace(/^SERA$/gm,       `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1.2rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Sera</span></div>`)
@@ -919,8 +923,8 @@ export default function PlannerPage() {
       return `## VOLO CONSIGLIATO\nRotta ${departure} - ${dest} ${period} ${y}: compagnie, prezzi, miglior opzione.\nLINK https://www.google.com/travel/flights?q=${encodeURIComponent(`${departure} ${dest}`)}\nLINK https://www.skyscanner.it/voli-per/${encodeURIComponent(dest.toLowerCase())}\n`;
     })();
     const formatStr = isMPS
-      ? 'Dividi ogni giorno in tre blocchi: MATTINA / POMERIGGIO / SERA (righe separate maiuscolo). Elenca attivita come bullet - sotto ogni blocco.'
-      : `SCHEDULE ORE PER ORA: ogni attivita con orario preciso. Formato:\nGiorno 1 - Titolo\n07:00 - Partenza da ${departure}\n09:30 - Arrivo e check-in\n10:00 - Visita sito X (durata: 1.5 ore)\nOgni riga deve avere ORARIO - ATTIVITA. Includi tempi di spostamento, mezzi, durate.`;
+      ? 'Ogni giorno DEVE iniziare con l\'intestazione "**Giorno N - Titolo**" su una riga a sé (es. "**Giorno 1 - Arrivo a Roma**"), seguita dai tre blocchi MATTINA / POMERIGGIO / SERA (ciascuno su riga separata, maiuscolo) con le attività come bullet - sotto ogni blocco.'
+      : `SCHEDULE ORE PER ORA: ogni giorno inizia con "**Giorno N - Titolo**" su riga a sé, poi ogni attivita con orario preciso. Formato:\n**Giorno 1 - Titolo**\n07:00 - Partenza da ${departure}\n09:30 - Arrivo e check-in\n10:00 - Visita sito X (durata: 1.5 ore)\nOgni riga deve avere ORARIO - ATTIVITA. Includi tempi di spostamento, mezzi, durate.`;
     // Link Booking per l'alloggio SCELTO (selStr), non generico sulla destinazione.
     // selStr puo essere "Citta: Nome Hotel" o piu voci separate da " | ": prendo la prima
     // e rimuovo l'eventuale prefisso "Citta: " per cercare il nome della struttura.

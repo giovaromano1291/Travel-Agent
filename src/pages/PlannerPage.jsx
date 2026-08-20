@@ -58,24 +58,49 @@ function parseDurationToNights(d) {
   return num ? parseInt(num[1]) : null;
 }
 
-function mdHtml(t) {
+/* ── Fasce orarie multilingua (Fase 1: IT + EN, estendibile) ──
+   SLOT_ALIASES: tutte le varianti che l'AI potrebbe scrivere -> marcatore fisso.
+   SLOT_LABELS: etichetta da MOSTRARE per lingua.
+   Aggiungere una lingua = aggiungere le sue parole qui, in un unico punto. */
+const SLOT_ALIASES = {
+  MATTINA:    ['MATTINA', 'MORNING'],
+  POMERIGGIO: ['POMERIGGIO', 'AFTERNOON'],
+  SERA:       ['SERA', 'EVENING'],
+};
+const SLOT_LABELS = {
+  it: { MATTINA: 'Mattina', POMERIGGIO: 'Pomeriggio', SERA: 'Sera' },
+  en: { MATTINA: 'Morning', POMERIGGIO: 'Afternoon', SERA: 'Evening' },
+};
+
+function mdHtml(t, lang = 'it') {
+  const labels = SLOT_LABELS[lang] || SLOT_LABELS.it;
+  const slotStyle = (marker) => {
+    const mt = marker === 'MATTINA' ? '1rem' : '1.2rem';
+    return `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:${mt} 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>${labels[marker]}</span></div>`;
+  };
   t = t.replace(/\r/g, '');
   t = t.replace(/^# .+$/gm, '');
-  const MPS = ['Mattina','MATTINA','Pomeriggio','POMERIGGIO','Sera','SERA'];
+  // Tutte le varianti linguistiche dei marcatori (MATTINA/MORNING...) -> lista piatta
+  const ALL_SLOTS = Object.values(SLOT_ALIASES).flat();
+  // Mappa variante -> marcatore fisso (per normalizzare l'output)
+  const SLOT_TO_MARKER = {};
+  for (const marker in SLOT_ALIASES) for (const a of SLOT_ALIASES[marker]) SLOT_TO_MARKER[a] = marker;
+  // Varianti anche in forma capitalizzata (Mattina, Morning) per il caso "titolo TAG in coda"
+  const MPS = ALL_SLOTS.flatMap(s => [s, s.charAt(0) + s.slice(1).toLowerCase()]);
   const lns = t.split('\n');
   const out = [];
   for (let i = 0; i < lns.length; i++) {
     const ln = lns[i];
     let found = false;
     for (const tag of MPS) {
-      if (ln.length > tag.length && ln.slice(-tag.length) === tag && ln.slice(-tag.length - 1, -tag.length) === ' ') {
+      if (ln.length > tag.length && ln.slice(-tag.length).toUpperCase() === tag.toUpperCase() && ln.slice(-tag.length - 1, -tag.length) === ' ') {
         const before = ln.slice(0, ln.length - tag.length - 1).trim();
         if (before.length > 0) { out.push(before); out.push(''); out.push(tag.toUpperCase()); found = true; break; }
       }
     }
     if (!found) {
-      const tr = ln.trim();
-      out.push(tr === 'Mattina' || tr === 'Pomeriggio' || tr === 'Sera' ? tr.toUpperCase() : ln);
+      const tr = ln.trim().toUpperCase();
+      out.push(ALL_SLOTS.includes(tr) ? tr : ln);
     }
   }
   t = out.join('\n');
@@ -83,9 +108,9 @@ function mdHtml(t) {
   t = t.replace(/([.!?])\s+(Trasporti|Pagamenti|App utili|Prenotazioni|Budget|App|Visto|Valigia):/g, '$1\n- $2:');
   t = t.replace(/\n{3,}/g, '\n\n');
   return t
-    .replace(/^\s*\*{0,2}\s*(Giorno\s*\d+[^\n]*?)\s*\*{0,2}\s*$/gim, (m, inner) => {
+    .replace(/^\s*\*{0,2}\s*((?:Giorno|Day)\s*\d+[^\n]*?)\s*\*{0,2}\s*$/gim, (m, inner) => {
       const clean = inner.replace(/\*\*/g, '').trim();
-      if (/^(MATTINA|POMERIGGIO|SERA)/i.test(clean)) return m;
+      if (new RegExp('^(' + ALL_SLOTS.join('|') + ')', 'i').test(clean)) return m;
       return `<div style='color:${GL};font-weight:700;margin-top:1.8rem;font-size:15px;border-top:0.5px solid #2a2a2a;padding-top:1.2rem;display:block'>${clean}</div>`;
     })
     .replace(/\*\*(.*?)\*\*/g, `<strong style='color:${GL};font-weight:500'>$1</strong>`)
@@ -93,9 +118,10 @@ function mdHtml(t) {
     .replace(/^([A-Z][A-ZÀÈÉÌÒÙ\s&'"-]+:[^\n]+\[(?:QUARTIERE|CIT))/gm, '### $1')
     .replace(/^### (.+)$/gm, `<div style='display:flex;align-items:center;gap:10px;margin:1.6rem 0 0.8rem;padding:10px 14px;background:linear-gradient(90deg,#1a1400,transparent);border-left:3px solid ${G};border-radius:0 8px 8px 0'><span style='font-family:Cormorant Garamond,serif;font-size:16px;font-weight:600;color:${GL}'>$1</span></div>`)
     .replace(/^## (.+)$/gm, `<div style='font-size:11px;letter-spacing:2px;color:${G};text-transform:uppercase;margin:1.4rem 0 0.6rem;border-top:0.5px solid #2a2a2a;padding-top:1rem;font-weight:600'>$1</div>`)
-    .replace(/^MATTINA$/gm,    `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Mattina</span></div>`)
-    .replace(/^POMERIGGIO$/gm, `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1.2rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Pomeriggio</span></div>`)
-    .replace(/^SERA$/gm,       `<div style='display:block;clear:both;color:${G};font-size:12px;font-weight:600;letter-spacing:1px;margin:1.2rem 0 0.5rem'><span style='padding:5px 12px;background:#1a1400;border-radius:6px;display:inline-block'>Sera</span></div>`)
+    .replace(new RegExp('^(' + ALL_SLOTS.join('|') + ')$', 'gm'), (m) => {
+      const marker = SLOT_TO_MARKER[m.toUpperCase()] || 'MATTINA';
+      return slotStyle(marker);
+    })
     .replace(/^---$/gm, `<div style='height:1px;background:#2a2a2a;margin:1.4rem 0'></div>`)
     .replace(/^LINK\s+(.+)$/gm, (_, rest) => {
       const m = rest.match(/https?:\/\/[^\s)]+/);
@@ -392,12 +418,12 @@ function Dots({ text }) {
   );
 }
 
-function ABox({ text, loading, lt, style: extraStyle }) {
+function ABox({ text, loading, lt, style: extraStyle, lang = 'it' }) {
   return (
     <div className="p-aib" style={extraStyle}>
       {loading && !text
         ? <Dots text={lt || 'Elaboro...'} />
-        : <div dangerouslySetInnerHTML={{ __html: mdHtml(text || '') + (loading ? "<span class='p-cur'></span>" : '') }} />
+        : <div dangerouslySetInnerHTML={{ __html: mdHtml(text || '', lang) + (loading ? "<span class='p-cur'></span>" : '') }} />
       }
     </div>
   );
@@ -585,7 +611,7 @@ export default function PlannerPage() {
     if (!finText) return;
     const titolo = `${dest ? dest.charAt(0).toUpperCase() + dest.slice(1) : dest} ${tripYear}`;
     const meta = metaTags.join(' · ');
-    const corpo = mdHtml(finText);
+    const corpo = mdHtml(finText, lang);
     const win = window.open('', '_blank');
     if (!win) { alert('Abilita i popup per scaricare il PDF.'); return; }
     win.document.write(`<!DOCTYPE html><html lang="it"><head><meta charset="utf-8">
@@ -970,7 +996,7 @@ export default function PlannerPage() {
     const giorni = []; let cur = null;
     for (const l of lines) {
       const t = l.trim();
-      if (/^#{0,3}\s*\*{0,2}giorno\s*\d+/i.test(t)) {
+      if (/^#{0,3}\s*\*{0,2}(?:giorno|day)\s*\d+/i.test(t)) {
         if (cur) giorni.push(cur);
         cur = { title: t.replace(/^#{1,3}\s*/, '').replace(/\*\*/g, '').trim(), items: [] };
       } else if (cur && (t[0] === '-' || t[0] === '*') && t.length > 2) {
@@ -1039,8 +1065,8 @@ export default function PlannerPage() {
             style={{ background:'#111', color:GL, border:`.5px solid ${BRD}`, borderRadius:8, padding:'6px 10px', fontSize:13, fontFamily:'Inter,sans-serif', cursor:'pointer' }}
             aria-label="Lingua"
           >
-            <option value="it">🇮🇹 Italiano</option>
-            <option value="en">🇬🇧 English</option>
+            <option value="it">Italiano</option>
+            <option value="en">English</option>
           </select>
         </div>
 
@@ -1077,7 +1103,7 @@ export default function PlannerPage() {
           <div className="p-card">
             <div className="p-tt">📅 Quando vuoi partire?</div>
             <div className="p-ht">Stagionalità per {dest}</div>
-            <ABox text={aiPer} loading={aiPerLoad} lt="Analizzo stagionalità..." />
+            <ABox text={aiPer} loading={aiPerLoad} lt="Analizzo stagionalità..." lang={lang} />
             <div style={{ marginBottom:'1.2rem' }}>
               <div style={{ fontSize:12, color:G, marginBottom:8, fontWeight:600 }}>🗓️ Scegli le date esatte (opzionale)</div>
               <div className="p-dpick">
@@ -1235,7 +1261,7 @@ export default function PlannerPage() {
             <Badge text={`${dest} · ${duration} · ${period} ${tripYear}`} />
             <div className="p-tt">🗺️ Il tuo piano di viaggio</div>
             <div className="p-ht">Ecco le città e le esperienze da non perdere</div>
-            <ABox text={planText} loading={planLoad} lt="Analizzo la destinazione..." />
+            <ABox text={planText} loading={planLoad} lt="Analizzo la destinazione..." lang={lang} />
             {!planLoad && planText && (
               <div>
                 {/* Promemoria del mezzo gia scelto allo step 7 */}
@@ -1263,7 +1289,7 @@ export default function PlannerPage() {
             <Badge text={`Piano aggiornato · ${dest}`} />
             <div className="p-tt">Piano rivisto</div>
             <div className="p-ht">Ho integrato le tue indicazioni</div>
-            <ABox text={revText} loading={revLoad} lt="Rielaboro il piano..." />
+            <ABox text={revText} loading={revLoad} lt="Rielaboro il piano..." lang={lang} />
             {!revLoad && revText && (
               <div>
                 <div style={{ fontSize:13, color:'#888', margin:'1rem 0 .5rem' }}>Altre modifiche o procediamo?</div>
@@ -1397,7 +1423,7 @@ export default function PlannerPage() {
             <Badge text="📋 Bozza itinerario" />
             <div className="p-tt">Prima bozza</div>
             <div className="p-ht">Ottimizzato per il tuo alloggio</div>
-            <ABox text={draftText} loading={draftLoad} lt="Ottimizzo gli spostamenti..." />
+            <ABox text={draftText} loading={draftLoad} lt="Ottimizzo gli spostamenti..." lang={lang} />
             {!draftLoad && draftText && (
               <div>
                 <div style={{ fontSize:13, color:'#888', margin:'1rem 0 .8rem' }}>Come trovi questa bozza?</div>
@@ -1472,7 +1498,7 @@ export default function PlannerPage() {
                 <YN icon="⏭️" title="No, scelgo da solo" sub="Salta questa sezione" onClick={() => { setWantsFood(false); setStep(14); }} />
               </div>
             )}
-            {(foodLoad || foodText) && <ABox text={foodText} loading={foodLoad} lt="Cerco ristoranti..." />}
+            {(foodLoad || foodText) && <ABox text={foodText} loading={foodLoad} lt="Cerco ristoranti..." lang={lang} />}
             {!foodLoad && foodText && (
               <div className="p-brow">
                 <Btn label="✅ Ottimo, scegli formato →" onClick={() => setStep(14)} />
@@ -1508,7 +1534,7 @@ export default function PlannerPage() {
             <div className="p-rbody">
               {finLoad && !finText && <Dots text="Genero l'itinerario definitivo..." />}
               {finText && (
-                <div className="p-rtxt" ref={finRef} dangerouslySetInnerHTML={{ __html: mdHtml(finText) + (finLoad ? "<span class='p-cur'></span>" : '') }} />
+                <div className="p-rtxt" ref={finRef} dangerouslySetInnerHTML={{ __html: mdHtml(finText, lang) + (finLoad ? "<span class='p-cur'></span>" : '') }} />
               )}
               {!finLoad && finText && (
                 <div>

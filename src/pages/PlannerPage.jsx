@@ -757,6 +757,7 @@ export default function PlannerPage() {
     setStep(9); setRevLoad(true); setRevText(''); setMods('');
     const y = tripYear || detectYear(period);
     const msg =
+      `IMPORTANTE: scrivi TUTTO in ${langName()}.\n\n` +
       `Piano originale per ${dest} (${period} ${y}):\n${planText}\n\n` +
       `L'utente ha richiesto una o PIU modifiche nel testo seguente. Identifica OGNI singola richiesta (aggiunte, rimozioni, escursioni in giornata, cambi di tappa) e applicale TUTTE, senza tralasciarne nessuna:\n"${mods}"\n\n` +
       `Rielabora con STESSO FORMATO: ### NOME (N giorni) [TIPO]\n- **Cosa vedere/fare/da non perdere**\n` +
@@ -909,6 +910,7 @@ export default function PlannerPage() {
     const y = tripYear || detectYear(period);
     const activeText = (revText || planText).slice(0, 1500);
     const msg =
+      `IMPORTANTE: scrivi TUTTO in ${langName()}.\n\n` +
       `Itinerario bozza per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, alloggio ${hotel}, ${trav()}.\n` +
       `Piano visite:\n${activeText}\n\n` +
       `FORMATO OBBLIGATORIO:\n\n**Giorno 1 - Titolo**\n\nMATTINA\n- Attivita 1 (tempo)\n- Attivita 2 (tempo)\n\nPOMERIGGIO\n- Attivita 1\n\nSERA\n- Attivita 1\n\n---\n\n` +
@@ -925,12 +927,14 @@ export default function PlannerPage() {
     const y = tripYear || detectYear(period);
     const nGiorni = parseDurationToNights(duration) || 3;
     const msg =
+      `IMPORTANTE: scrivi TUTTO il contenuto seguente in ${langName()} (nomi delle sezioni, descrizioni dei ristoranti, tipo, zona, specialita, consigli: TUTTO in ${langName()}).\n\n` +
       `Suggerisci ristoranti per un viaggio di ESATTAMENTE ${nGiorni} giorni a ${dest} (${period} ${y}), budget ${budget}, ${trav()}, alloggio ${selStr}.\n` +
       `IMPORTANTE: l'itinerario dura ${nGiorni} giorni (${duration}). Proponi i ristoranti SOLO per ${nGiorni} giorni. Non aggiungere giorni extra.\n` +
       `## PREZZI MEDI A ${dest.toUpperCase()}\n(costo medio a persona per tipologia)\n` +
       `## DOVE MANGIARE - GIORNO PER GIORNO\n` +
       `FORMATO OBBLIGATORIO: per OGNI giorno, da 1 a ${nGiorni}, inizia SEMPRE con un'intestazione su riga a se nel formato "**Giorno N**" (es. "**Giorno 1**", "**Giorno 2**"...), senza saltarne nessuno. Sotto ogni intestazione elenca PRANZO e CENA con nome locale, tipo, zona, prezzo, specialita e LINK url. Non unire due giorni sotto la stessa intestazione.\n` +
-      `## ESPERIENZE CULINARIE DA NON PERDERE\n3-4 esperienze con LINK url. Scrivi in ${langName()}.`;
+      `## ESPERIENZE CULINARIE DA NON PERDERE\n3-4 esperienze, OGNUNA su una riga separata che inizia con "- " (elenco puntato), nel formato "- **Nome esperienza**: breve descrizione. LINK url". Non scrivere le esperienze di seguito nello stesso paragrafo.\n` +
+      `Ricorda: TUTTO in ${langName()}.`;
     await callAI(msg, 3000, t => setFoodText(t));
     setFoodLoad(false);
   }

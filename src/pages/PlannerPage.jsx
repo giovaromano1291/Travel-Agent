@@ -923,10 +923,12 @@ export default function PlannerPage() {
   async function genFood() {
     setStep(13); setFoodLoad(true); setFoodText('');
     const y = tripYear || detectYear(period);
+    const nGiorni = parseDurationToNights(duration) || 3;
     const msg =
-      `Suggerisci ristoranti per ogni giorno a ${dest} (${period} ${y}), budget ${budget}, ${trav()}, alloggio ${selStr}.\n` +
+      `Suggerisci ristoranti per un viaggio di ESATTAMENTE ${nGiorni} giorni a ${dest} (${period} ${y}), budget ${budget}, ${trav()}, alloggio ${selStr}.\n` +
+      `IMPORTANTE: l'itinerario dura ${nGiorni} giorni (${duration}). Proponi i ristoranti SOLO per ${nGiorni} giorni, numerati da Giorno 1 a Giorno ${nGiorni}. Non aggiungere giorni extra.\n` +
       `## PREZZI MEDI A ${dest.toUpperCase()}\n(costo medio a persona per tipologia)\n` +
-      `## DOVE MANGIARE - GIORNO PER GIORNO\nPer ogni giorno: pranzo e cena con nome locale, tipo, zona, prezzo, specialita. LINK url\n` +
+      `## DOVE MANGIARE - GIORNO PER GIORNO\nPer ognuno dei ${nGiorni} giorni: pranzo e cena con nome locale, tipo, zona, prezzo, specialita. LINK url\n` +
       `## ESPERIENZE CULINARIE DA NON PERDERE\n3-4 esperienze con LINK url. Scrivi in ${langName()}.`;
     await callAI(msg, 3000, t => setFoodText(t));
     setFoodLoad(false);
@@ -1011,11 +1013,21 @@ export default function PlannerPage() {
     // i blocchi ### del piano cosi il riepilogo non resta vuoto.
     if (giorni.length === 0 && (draftText || planText || revText)) {
       const src = (revText || planText || '').split('\n');
+      let curCity = null;
       for (const l of src) {
         const t = l.trim();
         if (t.startsWith('###')) {
           const title = t.replace(/^#+\s*/, '').replace(/\[.*?\]/g, '').replace(/\*\*/g, '').trim();
-          if (title) giorni.push({ title, items: [] });
+          if (title) { curCity = { title, items: [] }; giorni.push(curCity); }
+        } else if (curCity && (t[0] === '-' || t[0] === '*') && t.length > 3) {
+          // Estraggo l'attivita dal bullet del piano (es. "- **Cosa vedere**: Duomo - ...")
+          let item = t.slice(1).trim().replace(/\*\*/g, '');
+          item = item.replace(/^(Cosa vedere|Cosa fare|Da non perdere)\s*:\s*/i, '');
+          let syn = item.replace(/\s*\([^)]*\)\s*$/, '').trim();
+          const cutIdx = syn.search(/\s[-–]\s|:\s/);
+          if (cutIdx > 10) syn = syn.slice(0, cutIdx);
+          if (syn.length > 55) syn = syn.slice(0, 52).trim() + '...';
+          if (syn.length > 3 && curCity.items.length < 4) curCity.items.push(syn);
         }
       }
     }

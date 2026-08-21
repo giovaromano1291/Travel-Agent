@@ -71,6 +71,9 @@ const SLOT_LABELS = {
   it: { MATTINA: 'Mattina', POMERIGGIO: 'Pomeriggio', SERA: 'Sera' },
   en: { MATTINA: 'Morning', POMERIGGIO: 'Afternoon', SERA: 'Evening' },
 };
+// Parola "Giorno" multilingua: varianti riconosciute + etichetta mostrata per lingua
+const DAY_ALIASES = ['Giorno', 'Day'];
+const DAY_WORD = { it: 'Giorno', en: 'Day' };
 
 function mdHtml(t, lang = 'it') {
   const labels = SLOT_LABELS[lang] || SLOT_LABELS.it;
@@ -108,9 +111,11 @@ function mdHtml(t, lang = 'it') {
   t = t.replace(/([.!?])\s+(Trasporti|Pagamenti|App utili|Prenotazioni|Budget|App|Visto|Valigia):/g, '$1\n- $2:');
   t = t.replace(/\n{3,}/g, '\n\n');
   return t
-    .replace(/^\s*\*{0,2}\s*((?:Giorno|Day)\s*\d+[^\n]*?)\s*\*{0,2}\s*$/gim, (m, inner) => {
-      const clean = inner.replace(/\*\*/g, '').trim();
-      if (new RegExp('^(' + ALL_SLOTS.join('|') + ')', 'i').test(clean)) return m;
+    .replace(new RegExp('^\\s*\\*{0,2}\\s*(?:' + DAY_ALIASES.join('|') + ')\\s*(\\d+)([^\\n]*?)\\s*\\*{0,2}\\s*$', 'gim'), (m, num, rest) => {
+      const restClean = (rest || '').replace(/\*\*/g, '').trim();
+      if (new RegExp('^(' + ALL_SLOTS.join('|') + ')', 'i').test(restClean)) return m;
+      const dayWord = DAY_WORD[lang] || DAY_WORD.it;
+      const clean = `${dayWord} ${num}${restClean ? ' ' + restClean : ''}`;
       return `<div style='color:${GL};font-weight:700;margin-top:1.8rem;font-size:15px;border-top:0.5px solid #2a2a2a;padding-top:1.2rem;display:block'>${clean}</div>`;
     })
     .replace(/\*\*(.*?)\*\*/g, `<strong style='color:${GL};font-weight:500'>$1</strong>`)

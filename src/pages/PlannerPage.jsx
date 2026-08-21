@@ -926,9 +926,10 @@ export default function PlannerPage() {
     const nGiorni = parseDurationToNights(duration) || 3;
     const msg =
       `Suggerisci ristoranti per un viaggio di ESATTAMENTE ${nGiorni} giorni a ${dest} (${period} ${y}), budget ${budget}, ${trav()}, alloggio ${selStr}.\n` +
-      `IMPORTANTE: l'itinerario dura ${nGiorni} giorni (${duration}). Proponi i ristoranti SOLO per ${nGiorni} giorni, numerati da Giorno 1 a Giorno ${nGiorni}. Non aggiungere giorni extra.\n` +
+      `IMPORTANTE: l'itinerario dura ${nGiorni} giorni (${duration}). Proponi i ristoranti SOLO per ${nGiorni} giorni. Non aggiungere giorni extra.\n` +
       `## PREZZI MEDI A ${dest.toUpperCase()}\n(costo medio a persona per tipologia)\n` +
-      `## DOVE MANGIARE - GIORNO PER GIORNO\nPer ognuno dei ${nGiorni} giorni: pranzo e cena con nome locale, tipo, zona, prezzo, specialita. LINK url\n` +
+      `## DOVE MANGIARE - GIORNO PER GIORNO\n` +
+      `FORMATO OBBLIGATORIO: per OGNI giorno, da 1 a ${nGiorni}, inizia SEMPRE con un'intestazione su riga a se nel formato "**Giorno N**" (es. "**Giorno 1**", "**Giorno 2**"...), senza saltarne nessuno. Sotto ogni intestazione elenca PRANZO e CENA con nome locale, tipo, zona, prezzo, specialita e LINK url. Non unire due giorni sotto la stessa intestazione.\n` +
       `## ESPERIENZE CULINARIE DA NON PERDERE\n3-4 esperienze con LINK url. Scrivi in ${langName()}.`;
     await callAI(msg, 3000, t => setFoodText(t));
     setFoodLoad(false);

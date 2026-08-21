@@ -88,23 +88,13 @@ function mdHtml(t, lang = 'it') {
   // Mappa variante -> marcatore fisso (per normalizzare l'output)
   const SLOT_TO_MARKER = {};
   for (const marker in SLOT_ALIASES) for (const a of SLOT_ALIASES[marker]) SLOT_TO_MARKER[a] = marker;
-  // Varianti anche in forma capitalizzata (Mattina, Morning) per il caso "titolo TAG in coda"
-  const MPS = ALL_SLOTS.flatMap(s => [s, s.charAt(0) + s.slice(1).toLowerCase()]);
+  // Riconosce un marcatore SOLO quando e da solo sulla sua riga (come i prompt richiedono).
+  // Cosi una frase che finisce con "...pomeriggio"/"...afternoon" NON viene spezzata.
   const lns = t.split('\n');
   const out = [];
-  for (let i = 0; i < lns.length; i++) {
-    const ln = lns[i];
-    let found = false;
-    for (const tag of MPS) {
-      if (ln.length > tag.length && ln.slice(-tag.length).toUpperCase() === tag.toUpperCase() && ln.slice(-tag.length - 1, -tag.length) === ' ') {
-        const before = ln.slice(0, ln.length - tag.length - 1).trim();
-        if (before.length > 0) { out.push(before); out.push(''); out.push(tag.toUpperCase()); found = true; break; }
-      }
-    }
-    if (!found) {
-      const tr = ln.trim().toUpperCase();
-      out.push(ALL_SLOTS.includes(tr) ? tr : ln);
-    }
+  for (const ln of lns) {
+    const tr = ln.trim().toUpperCase();
+    out.push(ALL_SLOTS.includes(tr) ? tr : ln);
   }
   t = out.join('\n');
   t = t.replace(/\.[ \t]+-[ \t]+/g, '.\n- ');

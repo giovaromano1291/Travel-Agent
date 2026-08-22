@@ -150,7 +150,7 @@ function mdHtml(t, lang = 'it') {
       const m = rest.match(/https?:\/\/[^\s)]+/);
       const url = m ? m[0] : '';
       if (!url) return `<div style='margin:0.3rem 0 0.3rem 1rem;color:#6ab0ff;font-size:12px'>Prenota: ${rest}</div>`;
-      return `<div style='margin:0.3rem 0 0.3rem 1rem;font-size:12px'><a href='${url}' target='_blank' rel='noopener noreferrer' style='color:#6ab0ff;text-decoration:none'>🔗 Prenota / Apri link</a></div>`;
+      return `<div style='margin:0.3rem 0 0.3rem 1rem;font-size:12px'><a href='${url}' target='_blank' rel='noopener noreferrer' style='color:#6ab0ff;text-decoration:none'>${lang === 'en' ? '🔗 Book / Open link' : '🔗 Prenota / Apri link'}</a></div>`;
     })
     .replace(/^[*-] (.+)$/gm, (_, p1) => {
       const lb = p1.replace(/^([A-Za-z\u00c0-\u00ff\s]+:)\s*/, `<strong style='color:${GL};font-weight:600'>$1</strong> `);
@@ -482,7 +482,7 @@ function Badge({ text }) {
 }
 
 /* ─── HCard — top-level component (must be outside PlannerPage) ─────────── */
-function HCard({ h, bi, city: cityName, budget, dates, selKeys, setSelKeys, selNames, setSelNames }) {
+function HCard({ h, bi, city: cityName, budget, dates, selKeys, setSelKeys, selNames, setSelNames, t }) {
   const nm = h.name || 'Hotel';
   const st = h.stars || 3;
   const zn = h.zone || h.zona || 'centro';
@@ -1296,7 +1296,7 @@ export default function PlannerPage() {
         {/* ── Step 8: Piano ── */}
         {step === 8 && (
           <div className="p-card" style={{ maxWidth:700 }}>
-            <Badge text={`${dest} · ${duration} · ${period} ${tripYear}`} />
+            <Badge text={`${dest} · ${optLabel('dur', duration)} · ${optLabel('month', period) !== period ? optLabel('month', period) : period} ${tripYear}`} />
             <div className="p-tt">{t('pl.s8.title')}</div>
             <div className="p-ht">{t('pl.s8.hint')}</div>
             <ABox text={planText} loading={planLoad} lt={t('pl.load.dest')} lang={lang} />
@@ -1305,7 +1305,7 @@ export default function PlannerPage() {
                 {/* Promemoria del mezzo gia scelto allo step 7 */}
                 {transport && (
                   <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#1a1400', border:`.5px solid ${G}`, borderRadius:20, padding:'4px 12px', fontSize:12, color:GL, margin:'1rem 0 0' }}>
-                    {t('pl.s8.travelBy').replace('{transport}', transport)}
+                    {t('pl.s8.travelBy').replace('{transport}', optLabel('transport', transport))}
                   </div>
                 )}
                 <div style={{ fontSize:13, color:'#888', margin:'1rem 0 .5rem' }}>{t('pl.s8.modifyQ')}</div>
@@ -1324,7 +1324,7 @@ export default function PlannerPage() {
         {/* ── Step 9: Piano rivisto ── */}
         {step === 9 && (
           <div className="p-card" style={{ maxWidth:700 }}>
-            <Badge text={`Piano aggiornato · ${dest}`} />
+            <Badge text={`${t('pl.badge.planUpdated')} · ${dest}`} />
             <div className="p-tt">{t('pl.s9.title')}</div>
             <div className="p-ht">{t('pl.s9.hint')}</div>
             <ABox text={revText} loading={revLoad} lt={t('pl.load.revise')} lang={lang} />
@@ -1343,9 +1343,9 @@ export default function PlannerPage() {
         {/* ── Step 10: Alloggi ── */}
         {step === 10 && (
           <div className="p-card" style={{ maxWidth:720 }}>
-            <Badge text={`🏨 Alloggi · ${dest} ${tripYear}`} />
+            <Badge text={`${t('pl.badge.hotels')} · ${dest} ${tripYear}`} />
             <div className="p-tt">{t('pl.s10.title')}</div>
-            <div className="p-ht">{t('pl.s10.hint').replace('{budget}', budget)}</div>
+            <div className="p-ht">{t('pl.s10.hint').replace('{budget}', optLabel('budget', budget + '.l'))}</div>
             {hotelLoad && hotelBases.length === 0 && <div className="p-aib"><Dots text={t('pl.load.hotels')} /></div>}
             {hotelBases.length > 0 && (
               <div>
@@ -1379,6 +1379,7 @@ export default function PlannerPage() {
                 <HCard key={hi} h={h} bi={bi} city={base.city}
                   budget={budget}
                   dates={bookingDates()}
+                  t={t}
                   selKeys={selKeys} setSelKeys={setSelKeys}
                   selNames={selNames} setSelNames={setSelNames}
                 />
@@ -1477,7 +1478,7 @@ export default function PlannerPage() {
         {/* ── Step 12: Guide ── */}
         {step === 12 && (
           <div className="p-card" style={{ maxWidth:780 }}>
-            <Badge text={`🧭 Guide · ${dest}`} />
+            <Badge text={`${t('pl.badge.guides')} · ${dest}`} />
             <div className="p-tt">{t('pl.s12.title')}</div>
             <div className="p-ht">{t('pl.s12.hint')}</div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, alignItems:'start' }}>
@@ -1527,9 +1528,9 @@ export default function PlannerPage() {
         {/* ── Step 13: Ristorazione ── */}
         {step === 13 && (
           <div className="p-card" style={{ maxWidth:700 }}>
-            <Badge text={`🍽️ Ristorazione · ${dest}`} />
+            <Badge text={`${t('pl.badge.dining')} · ${dest}`} />
             <div className="p-tt">{t('pl.s13.title')}</div>
-            <div className="p-ht">{t('pl.s13.hint').replace('{budget}', budget)}</div>
+            <div className="p-ht">{t('pl.s13.hint').replace('{budget}', optLabel('budget', budget + '.l'))}</div>
             {!foodText && !foodLoad && (
               <div className="p-yn">
                 <YN icon="🍽️" title={t('pl.s13.yes')} sub={t('pl.s13.yesSub')} onClick={() => { setWantsFood(true); genFood(); }} />
@@ -1617,7 +1618,7 @@ export default function PlannerPage() {
                     <button
                       style={{ background:'#1a1400', border:`.5px solid ${G}`, borderRadius:10, padding:'10px 18px', color:G, fontSize:13, fontFamily:'Inter,sans-serif', cursor:'pointer', fontWeight:500 }}
                       onClick={() => { try { window.scrollTo({ top:0, behavior:'smooth' }); } catch {} }}
-                    >↑ Torna all'inizio</button>
+                    >{t('pl.backToTop')}</button>
                     <p style={{ fontSize:11, color:'#555' }}>{t('pl.s15.disclaimer')}</p>
                   </div>
                 </div>

@@ -315,6 +315,12 @@ export const translations = {
     'pl.meta.adult': '{n} adulto',
     'pl.meta.children': '+ {n} bambini',
     'pl.meta.child': '+ {n} bambino',
+    'pl.badge.planUpdated': 'Piano aggiornato',
+    'pl.badge.hotels': '🏨 Alloggi',
+    'pl.badge.guides': '🧭 Guide',
+    'pl.badge.dining': '🍽️ Ristorazione',
+    'pl.bookLink': '🔗 Prenota / Apri link',
+    'pl.backToTop': '↑ Torna all\'inizio',
   },
 
   en: {
@@ -576,5 +582,11 @@ export const translations = {
     'pl.meta.adult': '{n} adult',
     'pl.meta.children': '+ {n} children',
     'pl.meta.child': '+ {n} child',
+    'pl.badge.planUpdated': 'Plan updated',
+    'pl.badge.hotels': '🏨 Hotels',
+    'pl.badge.guides': '🧭 Guides',
+    'pl.badge.dining': '🍽️ Dining',
+    'pl.bookLink': '🔗 Book / Open link',
+    'pl.backToTop': '↑ Back to top',
   },
 };

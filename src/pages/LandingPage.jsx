@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useLang } from '../hooks/useLang'
 
 const G = '#C9A84C', GL = '#e8c97a'
 
@@ -115,25 +116,30 @@ const css = `
   }
 `
 
-const FEATURES = [
-  { icon: '🗺️', title: 'Itinerario giorno per giorno', desc: 'Ogni giornata pianificata con mattina, pomeriggio e sera. Ottimizzata per percorsi e spostamenti.' },
-  { icon: '🏨', title: 'Hotel selezionati per te', desc: 'Proposte reali per ogni budget: economico, medio o luxury. Con link diretti a Booking.com.' },
-  { icon: '🍽️', title: 'Dove mangiare ogni giorno', desc: 'Ristoranti locali per pranzo e cena, con specialità, zona e fascia di prezzo.' },
-  { icon: '✈️', title: 'Voli e logistica', desc: 'Suggerimenti su voli, trasporti interni, app utili e prenotazioni essenziali.' },
-  { icon: '🧭', title: 'Guide turistiche locali', desc: 'Opzione di aggiungere guide certificate nella lingua che preferisci.' },
-  { icon: '💾', title: 'Salva i tuoi itinerari', desc: 'Ogni viaggio pianificato viene salvato nel tuo profilo. Accedi quando vuoi.' },
+const buildFeatures = (t) => [
+  { icon: '🗺️', title: t('land.feat.1.title'), desc: t('land.feat.1.desc') },
+  { icon: '🏨', title: t('land.feat.2.title'), desc: t('land.feat.2.desc') },
+  { icon: '🍽️', title: t('land.feat.3.title'), desc: t('land.feat.3.desc') },
+  { icon: '✈️', title: t('land.feat.4.title'), desc: t('land.feat.4.desc') },
+  { icon: '🧭', title: t('land.feat.5.title'), desc: t('land.feat.5.desc') },
+  { icon: '💾', title: t('land.feat.6.title'), desc: t('land.feat.6.desc') },
 ]
 
-const HOW_STEPS = [
-  { title: 'Scegli la destinazione', desc: 'Inserisci dove vuoi andare: una città, un paese o una regione. L\'AI analizza subito i periodi migliori.' },
-  { title: 'Personalizza il tuo viaggio', desc: 'Periodo, durata, numero di viaggiatori, stile (cultura, relax, avventura...) e budget. In pochi click.' },
-  { title: 'Ricevi il tuo piano completo', desc: 'L\'AI genera un piano ad alto livello delle tappe, poi lo raffina con hotel, ristoranti e logistica.' },
-  { title: 'Prenota direttamente', desc: 'Link integrati per voli, hotel, ristoranti e attività. Da pianificazione a prenotazione senza uscire dall\'app.' },
+const buildHowSteps = (t) => [
+  { title: t('land.how.1.title'), desc: t('land.how.1.desc') },
+  { title: t('land.how.2.title'), desc: t('land.how.2.desc') },
+  { title: t('land.how.3.title'), desc: t('land.how.3.desc') },
+  { title: t('land.how.4.title'), desc: t('land.how.4.desc') },
 ]
 
 export default function LandingPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { t, lang, setLang, languages } = useLang()
+
+  const FEATURES = buildFeatures(t)
+  const HOW_STEPS = buildHowSteps(t)
+  const STATS = [['15+', t('land.stat.steps')], ['3', t('land.stat.budget')], ['100%', t('land.stat.custom')], ['AI', t('land.stat.powered')]]
 
   return (
     <>
@@ -147,12 +153,16 @@ export default function LandingPage() {
             <div className="nav-name">Travel <span>AI</span> Agent</div>
           </a>
           <div className="nav-actions">
+            <select value={lang} onChange={e => setLang(e.target.value)} aria-label="Lingua"
+              style={{ background:'transparent', color:'#aaa', border:'.5px solid #333', borderRadius:8, padding:'7px 10px', fontSize:13, fontFamily:'Inter,sans-serif', cursor:'pointer' }}>
+              {languages.map(l => <option key={l.code} value={l.code} style={{ background:'#0d0d0d' }}>{l.label}</option>)}
+            </select>
             {user ? (
-              <button className="btn-gold" onClick={() => navigate('/dashboard')}>Il mio profilo →</button>
+              <button className="btn-gold" onClick={() => navigate('/dashboard')}>{t('land.nav.profile')}</button>
             ) : (
               <>
-                <button className="btn-ghost" onClick={() => navigate('/auth?mode=login')}>Accedi</button>
-                <button className="btn-gold" onClick={() => navigate('/auth?mode=signup')}>Inizia gratis</button>
+                <button className="btn-ghost" onClick={() => navigate('/auth?mode=login')}>{t('land.nav.login')}</button>
+                <button className="btn-gold" onClick={() => navigate('/auth?mode=signup')}>{t('land.nav.signup')}</button>
               </>
             )}
           </div>
@@ -160,27 +170,26 @@ export default function LandingPage() {
 
         {/* HERO */}
         <section className="hero">
-          <div className="hero-eyebrow">✦ Pianificazione viaggi con AI</div>
+          <div className="hero-eyebrow">{t('land.hero.eyebrow')}</div>
           <h1 className="hero-title">
-            Il tuo consulente di viaggio<br /><em>sempre disponibile</em>
+            {t('land.hero.title1')}<br /><em>{t('land.hero.title2')}</em>
           </h1>
           <p className="hero-sub">
-            Inserisci destinazione, date e preferenze. L'intelligenza artificiale costruisce per te
-            un itinerario completo, con hotel, ristoranti e link di prenotazione.
+            {t('land.hero.sub')}
           </p>
           <div className="hero-cta">
             <button className="btn-hero" onClick={() => navigate(user ? '/planner' : '/auth?mode=signup')}>
-              Pianifica il tuo viaggio →
+              {t('land.hero.ctaMain')}
             </button>
             <button className="btn-hero-ghost" onClick={() => navigate('/auth?mode=login')}>
-              Ho già un account
+              {t('land.hero.ctaGhost')}
             </button>
           </div>
         </section>
 
         {/* STATS */}
         <div className="stats">
-          {[['15+','Passi guidati'],['3','Fasce budget'],['100%','Personalizzato'],['AI','Powered']].map(([n,l]) => (
+          {STATS.map(([n,l]) => (
             <div className="stat" key={l}>
               <div className="stat-n">{n}</div>
               <div className="stat-l">{l}</div>
@@ -190,8 +199,8 @@ export default function LandingPage() {
 
         {/* FEATURES */}
         <section className="features">
-          <div className="section-label">Funzionalità</div>
-          <h2 className="section-title">Tutto quello che serve per viaggiare bene</h2>
+          <div className="section-label">{t('land.feat.label')}</div>
+          <h2 className="section-title">{t('land.feat.title')}</h2>
           <div className="feat-grid">
             {FEATURES.map(f => (
               <div className="feat-item" key={f.title}>
@@ -206,8 +215,8 @@ export default function LandingPage() {
         {/* HOW IT WORKS */}
         <section className="how">
           <div className="how-inner">
-            <div className="section-label">Come funziona</div>
-            <h2 className="section-title">Quattro passi verso il viaggio perfetto</h2>
+            <div className="section-label">{t('land.how.label')}</div>
+            <h2 className="section-title">{t('land.how.title')}</h2>
             <div className="steps-list">
               {HOW_STEPS.map((s, i) => (
                 <div className="step-row" key={s.title}>
@@ -225,18 +234,18 @@ export default function LandingPage() {
         {/* CTA FINALE */}
         <section className="cta-section">
           <div className="cta-box">
-            <h2 className="cta-title">Pronto a pianificare il prossimo viaggio?</h2>
-            <p className="cta-sub">Registrati gratuitamente. Nessuna carta di credito richiesta.</p>
+            <h2 className="cta-title">{t('land.cta.title')}</h2>
+            <p className="cta-sub">{t('land.cta.sub')}</p>
             <button className="btn-hero" onClick={() => navigate('/auth?mode=signup')}>
-              Crea il tuo account gratis →
+              {t('land.cta.btn')}
             </button>
           </div>
         </section>
 
         {/* FOOTER */}
         <footer className="footer">
-          <div className="footer-copy">© 2026 Travel AI Agent</div>
-          <div className="footer-note">Itinerari generati da AI — Verifica prima di prenotare</div>
+          <div className="footer-copy">{t('land.footer.copy')}</div>
+          <div className="footer-note">{t('land.footer.note')}</div>
         </footer>
 
       </div>

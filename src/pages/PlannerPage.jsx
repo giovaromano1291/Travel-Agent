@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useLang } from '../hooks/useLang';
+import { SECTION_ALIASES, SECTION_LABELS, BULLET_ALIASES, BULLET_LABELS, DAYS_WORD, TYPE_TAG_ALIASES, TYPE_TAG_LABELS } from '../lib/translations';
 
 /* ─── Design tokens ─────────────────────────────────────────────────────── */
 const G   = '#C9A84C';
@@ -100,6 +101,33 @@ function mdHtml(t, lang = 'it') {
   t = t.replace(/\.[ \t]+-[ \t]+/g, '.\n- ');
   t = t.replace(/([.!?])\s+(Trasporti|Pagamenti|App utili|Prenotazioni|Budget|App|Visto|Valigia):/g, '$1\n- $2:');
   t = t.replace(/\n{3,}/g, '\n\n');
+  // Traduzione titoli di sezione (## / ###) e bullet nella lingua attiva (scalabile).
+  const secLabels = SECTION_LABELS[lang] || SECTION_LABELS.it;
+  for (const key in SECTION_ALIASES) {
+    for (const alias of SECTION_ALIASES[key]) {
+      // Sostituisce il titolo sezione anche se seguito da testo variabile (es. "PREZZI MEDI A ROMA")
+      const re = new RegExp('(^|\\n)(#{2,3}\\s*)' + alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^\\n]*)', 'gi');
+      t = t.replace(re, (m, pre, hashes, tail) => `${pre}${hashes}${secLabels[key]}${tail}`);
+    }
+  }
+  const bulLabels = BULLET_LABELS[lang] || BULLET_LABELS.it;
+  for (const key in BULLET_ALIASES) {
+    for (const alias of BULLET_ALIASES[key]) {
+      const re = new RegExp('(\\*\\*)' + alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s*\\*\\*|:)', 'gi');
+      t = t.replace(re, (m, p1, p2) => `${p1}${bulLabels[key]}${p2}`);
+    }
+  }
+  // Traduzione "(N giorno/giorni)" nei titoli del piano
+  const dw = DAYS_WORD[lang] || DAYS_WORD.it;
+  t = t.replace(/\((\d+)\s*(?:giorni|giorno|days|day)\)/gi, (m, n) => `(${n} ${parseInt(n) === 1 ? dw.one : dw.many})`);
+  // Traduzione tag tipo blocco [QUARTIERE]/[CITTA]
+  const tagLabels = TYPE_TAG_LABELS[lang] || TYPE_TAG_LABELS.it;
+  for (const key in TYPE_TAG_ALIASES) {
+    for (const alias of TYPE_TAG_ALIASES[key]) {
+      const re = new RegExp('\\[' + alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\]', 'gi');
+      t = t.replace(re, `[${tagLabels[key]}]`);
+    }
+  }
   return t
     .replace(new RegExp('^\\s*\\*{0,2}\\s*(?:' + DAY_ALIASES.join('|') + ')\\s*(\\d+)([^\\n]*?)\\s*\\*{0,2}\\s*$', 'gim'), (m, num, rest) => {
       const restClean = (rest || '').replace(/\*\*/g, '').trim();
@@ -480,7 +508,7 @@ function HCard({ h, bi, city: cityName, budget, dates, selKeys, setSelKeys, selN
   }
   return (
     <div className={`p-hcard${isSel ? ' sel' : ''}`} onClick={select}>
-      {bs && <div style={{ display:'inline-block', background:'#1a1400', border:`.5px solid ${G}`, borderRadius:10, padding:'2px 10px', fontSize:10, color:G, marginBottom:6 }}>★ Miglior rapporto qualità/prezzo</div>}
+      {bs && <div style={{ display:'inline-block', background:'#1a1400', border:`.5px solid ${G}`, borderRadius:10, padding:'2px 10px', fontSize:10, color:G, marginBottom:6 }}>{t('pl.s10.bestValue')}</div>}
       <div style={{ fontSize:15, color:GL, fontWeight:500, marginBottom:4 }}>{nm} {starsStr(st)}</div>
       <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:6 }}>
         {[zn, pr, budget].filter(Boolean).map(tag => (
@@ -493,7 +521,7 @@ function HCard({ h, bi, city: cityName, budget, dates, selKeys, setSelKeys, selN
           {ps.map((pf, pi) => <span key={pi} style={{ background:'#1a1a1a', border:'.5px solid #333', borderRadius:10, padding:'3px 9px', fontSize:11, color:'#bbb' }}>✓ {pf}</span>)}
         </div>
       )}
-      <a href={ur} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'#6ab0ff', textDecoration:'none' }} onClick={e => e.stopPropagation()}>🔗 Prenota su Booking.com</a>
+      <a href={ur} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'#6ab0ff', textDecoration:'none' }} onClick={e => e.stopPropagation()}>{t('pl.s10.bookOn')}</a>
     </div>
   );
 }
@@ -935,7 +963,7 @@ export default function PlannerPage() {
       `IMPORTANTE: l'itinerario dura ${nGiorni} giorni (${duration}). Proponi i ristoranti SOLO per ${nGiorni} giorni. Non aggiungere giorni extra.\n` +
       `## PREZZI MEDI A ${dest.toUpperCase()}\n(costo medio a persona per tipologia)\n` +
       `## DOVE MANGIARE - GIORNO PER GIORNO\n` +
-      `FORMATO OBBLIGATORIO: per OGNI giorno, da 1 a ${nGiorni}, inizia SEMPRE con un'intestazione su riga a se nel formato "**Giorno N**" (es. "**Giorno 1**", "**Giorno 2**"...), senza saltarne nessuno. Sotto ogni intestazione elenca PRANZO e CENA con nome locale, tipo, zona, prezzo, specialita e LINK url. Non unire due giorni sotto la stessa intestazione.\n` +
+      `FORMATO OBBLIGATORIO E TASSATIVO: struttura l'output per giorni distinti. Per OGNI giorno da 1 a ${nGiorni} scrivi PRIMA un'intestazione isolata "**Giorno N**" (esatto: "**Giorno 1**", poi piu sotto "**Giorno 2**", ecc.), e SOLO SOTTO quell'intestazione metti il PRANZO e la CENA di quel giorno. Ogni giorno ha ESATTAMENTE un pranzo e una cena. Prima di passare al giorno successivo, chiudi il precedente. NON elencare piu ristoranti consecutivi senza la loro intestazione di giorno. Devi produrre esattamente ${nGiorni} intestazioni "**Giorno N**", una per giorno, in ordine.\n` +
       `## ESPERIENZE CULINARIE DA NON PERDERE\n3-4 esperienze, OGNUNA su una riga separata che inizia con "- " (elenco puntato), nel formato "- **Nome esperienza**: breve descrizione. LINK url". Non scrivere le esperienze di seguito nello stesso paragrafo.\n` +
       `Ricorda: TUTTO in ${langName()}.`;
     await callAI(msg, 3000, t => setFoodText(t));
@@ -1064,7 +1092,16 @@ export default function PlannerPage() {
     { l:'Viator',         s:'Tour ed esperienze',   h:`https://www.viator.com/search/${encodeURIComponent(dest)}` },
   ];
 
-  const metaTags = [period, travType, `${adults} adult${adults>1?'i':'o'}${children>0?` + ${children} bambin${children>1?'i':'o'}`:''}`, duration, style, budget].filter(Boolean);
+  const adultsLabel = (adults > 1 ? t('pl.meta.adults') : t('pl.meta.adult')).replace('{n}', adults);
+  const childrenLabel = children > 0 ? ' ' + (children > 1 ? t('pl.meta.children') : t('pl.meta.child')).replace('{n}', children) : '';
+  const metaTags = [
+    optLabel('month', period) !== period ? optLabel('month', period) : period,
+    optLabel('ttype', travType),
+    adultsLabel + childrenLabel,
+    optLabel('dur', duration),
+    optLabel('style', style),
+    optLabel('budget', budget + '.l'),
+  ].filter(Boolean);
 
   /* ─── Render ─────────────────────────────────────────────────────────── */
   return (
@@ -1105,7 +1142,7 @@ export default function PlannerPage() {
           <div className="p-card">
             <div className="p-tt">{t('pl.s2.title')}</div>
             <div className="p-ht">{t('pl.s2.hint').replace('{dest}', dest)}</div>
-            <ABox text={aiPer} loading={aiPerLoad} lt="Analizzo stagionalità..." lang={lang} />
+            <ABox text={aiPer} loading={aiPerLoad} lt={t('pl.load.season')} lang={lang} />
             <div style={{ marginBottom:'1.2rem' }}>
               <div style={{ fontSize:12, color:G, marginBottom:8, fontWeight:600 }}>{t('pl.s2.dateHint')}</div>
               <div className="p-dpick">
@@ -1233,7 +1270,7 @@ export default function PlannerPage() {
                 <div style={{ fontSize:12, color:'#888', marginBottom:12 }}>Il mezzo scelto {t('pl.s7.transportHint')}</div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
                   {['Auto propria','Auto a noleggio','Moto','Camper','Treno','Bus','Aereo'].map(opt => (
-                    <div key={opt} className={'p-chip' + (transport === opt ? ' sel' : '')} onClick={() => setTransport(opt)}>{opt}</div>
+                    <div key={opt} className={'p-chip' + (transport === opt ? ' sel' : '')} onClick={() => setTransport(opt)}>{optLabel('transport', opt)}</div>
                   ))}
                 </div>
               </div>
@@ -1262,7 +1299,7 @@ export default function PlannerPage() {
             <Badge text={`${dest} · ${duration} · ${period} ${tripYear}`} />
             <div className="p-tt">{t('pl.s8.title')}</div>
             <div className="p-ht">{t('pl.s8.hint')}</div>
-            <ABox text={planText} loading={planLoad} lt="Analizzo la destinazione..." lang={lang} />
+            <ABox text={planText} loading={planLoad} lt={t('pl.load.dest')} lang={lang} />
             {!planLoad && planText && (
               <div>
                 {/* Promemoria del mezzo gia scelto allo step 7 */}
@@ -1290,7 +1327,7 @@ export default function PlannerPage() {
             <Badge text={`Piano aggiornato · ${dest}`} />
             <div className="p-tt">{t('pl.s9.title')}</div>
             <div className="p-ht">{t('pl.s9.hint')}</div>
-            <ABox text={revText} loading={revLoad} lt="Rielaboro il piano..." lang={lang} />
+            <ABox text={revText} loading={revLoad} lt={t('pl.load.revise')} lang={lang} />
             {!revLoad && revText && (
               <div>
                 <div style={{ fontSize:13, color:'#888', margin:'1rem 0 .5rem' }}>{t('pl.s9.moreQ')}</div>
@@ -1309,20 +1346,20 @@ export default function PlannerPage() {
             <Badge text={`🏨 Alloggi · ${dest} ${tripYear}`} />
             <div className="p-tt">{t('pl.s10.title')}</div>
             <div className="p-ht">{t('pl.s10.hint').replace('{budget}', budget)}</div>
-            {hotelLoad && hotelBases.length === 0 && <div className="p-aib"><Dots text="Cerco hotel per ogni città..." /></div>}
+            {hotelLoad && hotelBases.length === 0 && <div className="p-aib"><Dots text={t('pl.load.hotels')} /></div>}
             {hotelBases.length > 0 && (
               <div>
                 {/* Summary bar */}
                 <div style={{ background:'#111', border:`.5px solid ${BRD}`, borderRadius:12, padding:'14px 18px', marginBottom:'1.2rem' }}>
                   <div style={{ fontSize:11, letterSpacing:'2px', color:G, textTransform:'uppercase', fontWeight:600, marginBottom:'0.9rem' }}>
-                    {hotelBases.length > 1 ? `🗺️ Soggiorno in ${hotelBases.length} basi` : '🏨 Alloggio unico'}
+                    {hotelBases.length > 1 ? t('pl.s10.multiBase').replace('{n}', hotelBases.length) : t('pl.s10.singleBase')}
                   </div>
                   <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:6 }}>
                     {hotelBases.map((b, bi) => (
                       <>
                         <div key={bi} style={{ background:'#1a1400', border:`.5px solid ${G}`, borderRadius:20, padding:'6px 14px', display:'flex', alignItems:'center', gap:6 }}>
                           <span style={{ fontSize:12, color:GL, fontWeight:600 }}>{b.city}</span>
-                          <span style={{ fontSize:10, color:G, background:'#111', borderRadius:10, padding:'1px 7px' }}>{b.days || '?'} notti</span>
+                          <span style={{ fontSize:10, color:G, background:'#111', borderRadius:10, padding:'1px 7px' }}>{t('pl.s10.nights').replace('{n}', b.days || '?')}</span>
                         </div>
                         {bi < hotelBases.length - 1 && <span style={{ color:'#444', fontSize:16, margin:'0 2px' }}>→</span>}
                       </>
@@ -1335,7 +1372,7 @@ export default function PlannerPage() {
                   <div key={bi} style={{ marginBottom:'1.8rem' }}>
                     <div style={{ display:'flex', alignItems:'center', flexWrap:'wrap', gap:8, marginBottom:'.8rem', paddingBottom:'.6rem', borderBottom:`.5px solid ${BRD}` }}>
                       <div style={{ background:G, borderRadius:8, padding:'4px 14px', fontSize:12, color:DK, fontWeight:700 }}>📍 {base.city}</div>
-                      <div style={{ background:'#1a1400', border:`.5px solid ${G}`, borderRadius:12, padding:'3px 10px', fontSize:11, color:G }}>{base.days} notti</div>
+                      <div style={{ background:'#1a1400', border:`.5px solid ${G}`, borderRadius:12, padding:'3px 10px', fontSize:11, color:G }}>{t('pl.s10.nights').replace('{n}', base.days)}</div>
                       {hotelLoad && <div style={{ fontSize:11, color:'#888' }}>caricamento...</div>}
                     </div>
                     {base.hotels.map((h, hi) => (
@@ -1369,7 +1406,7 @@ export default function PlannerPage() {
                 {/* Modifica basi */}
                 {showHotelNotes && (
                   <div style={{ background:'#111', border:`.5px solid ${G}`, borderRadius:12, padding:'1.2rem 1.4rem', marginTop:'1rem' }}>
-                    <div style={{ fontSize:13, color:GL, fontWeight:600, marginBottom:4 }}>✒️ Modifica basi e distribuzione notti</div>
+                    <div style={{ fontSize:13, color:GL, fontWeight:600, marginBottom:4 }}>{t('pl.s10.editBasesTitle')}</div>
                     <div style={{ fontSize:12, color:'#888', marginBottom:'0.8rem', lineHeight:1.6 }}>{t('pl.s10.editHint')}</div>
                     {hotelBases.length > 0 && (
                       <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:'0.8rem' }}>
@@ -1421,16 +1458,16 @@ export default function PlannerPage() {
         {/* ── Step 11: Bozza ── */}
         {step === 11 && (
           <div className="p-card" style={{ maxWidth:700 }}>
-            <Badge text="📋 Bozza itinerario" />
+            <Badge text={t('pl.s11.draftTitle')} />
             <div className="p-tt">{t('pl.s11.title')}</div>
             <div className="p-ht">{t('pl.s11.hint')}</div>
-            <ABox text={draftText} loading={draftLoad} lt="Ottimizzo gli spostamenti..." lang={lang} />
+            <ABox text={draftText} loading={draftLoad} lt={t('pl.load.draft')} lang={lang} />
             {!draftLoad && draftText && (
               <div>
                 <div style={{ fontSize:13, color:'#888', margin:'1rem 0 .8rem' }}>{t('pl.s11.howQ')}</div>
                 <div className="p-yn">
-                  <YN icon="✅" title="Ottima, procedi" sub="Passa alle guide" onClick={() => setStep(12)} />
-                  <YN icon="🔄" title="Rigenera" sub="Crea nuova versione" onClick={() => genDraft(selStr)} />
+                  <YN icon="✅" title={t('pl.s11.good')} sub={t('pl.s11.goodSub')} onClick={() => setStep(12)} />
+                  <YN icon="🔄" title={t('pl.s11.regen')} sub={t('pl.s11.regenSub')} onClick={() => genDraft(selStr)} />
                 </div>
               </div>
             )}
@@ -1447,8 +1484,8 @@ export default function PlannerPage() {
               <div>
                 {guide === null && (
                   <div className="p-yn">
-                    <YN icon="🙋" title="{t('pl.s12.yesGuide')}" sub="{t('pl.s12.yesGuideSub')}" onClick={() => setGuide('yes')} />
-                    <YN icon="🚶" title="{t('pl.s12.noGuide')}" sub="{t('pl.s12.noGuideSub')}" onClick={() => { setGuide(false); setStep(13); }} />
+                    <YN icon="🙋" title={t('pl.s12.yesGuide')} sub={t('pl.s12.yesGuideSub')} onClick={() => setGuide('yes')} />
+                    <YN icon="🚶" title={t('pl.s12.noGuide')} sub={t('pl.s12.noGuideSub')} onClick={() => { setGuide(false); setStep(13); }} />
                   </div>
                 )}
                 {guide === 'yes' && (
@@ -1495,11 +1532,11 @@ export default function PlannerPage() {
             <div className="p-ht">{t('pl.s13.hint').replace('{budget}', budget)}</div>
             {!foodText && !foodLoad && (
               <div className="p-yn">
-                <YN icon="🍽️" title="Sì, suggerisci" sub="Pranzo e cena per ogni giorno" onClick={() => { setWantsFood(true); genFood(); }} />
-                <YN icon="⏭️" title="No, scelgo da solo" sub="Salta questa sezione" onClick={() => { setWantsFood(false); setStep(14); }} />
+                <YN icon="🍽️" title={t('pl.s13.yes')} sub={t('pl.s13.yesSub')} onClick={() => { setWantsFood(true); genFood(); }} />
+                <YN icon="⏭️" title={t('pl.s13.no')} sub={t('pl.s13.noSub')} onClick={() => { setWantsFood(false); setStep(14); }} />
               </div>
             )}
-            {(foodLoad || foodText) && <ABox text={foodText} loading={foodLoad} lt="Cerco ristoranti..." lang={lang} />}
+            {(foodLoad || foodText) && <ABox text={foodText} loading={foodLoad} lt={t('pl.load.food')} lang={lang} />}
             {!foodLoad && foodText && (
               <div className="p-brow">
                 <Btn label={t('pl.s13.chooseFormat')} onClick={() => setStep(14)} />
@@ -1533,7 +1570,7 @@ export default function PlannerPage() {
               <div className="p-rmeta">{metaTags.map(t => <span key={t} className="p-mtag">{t}</span>)}</div>
             </div>
             <div className="p-rbody">
-              {finLoad && !finText && <Dots text="Genero l'itinerario definitivo..." />}
+              {finLoad && !finText && <Dots text={t('pl.load.final')} />}
               {finText && (
                 <div className="p-rtxt" ref={finRef} dangerouslySetInnerHTML={{ __html: mdHtml(finText, lang) + (finLoad ? "<span class='p-cur'></span>" : '') }} />
               )}

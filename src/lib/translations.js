@@ -8,6 +8,53 @@ export const LANGUAGES = [
   { code: 'en', label: 'English' },
 ];
 
+// Titoli di sezione generati dall'AI negli itinerari.
+// SECTION_ALIASES: varianti riconosciute (IT/EN) -> chiave fissa.
+// SECTION_LABELS: etichetta mostrata per lingua. Scalabile: aggiungi la lingua qui.
+// Parola "giorno/giorni" dentro i titoli del piano, es. "(3 giorni)"
+export const DAYS_WORD = {
+  it: { one: 'giorno', many: 'giorni' },
+  en: { one: 'day', many: 'days' },
+};
+// Tag tipo blocco nel piano: [QUARTIERE] / [CITTA]
+export const TYPE_TAG_ALIASES = {
+  QUARTIERE: ['QUARTIERE', 'DISTRICT', 'NEIGHBORHOOD'],
+  CITTA: ['CITTA', 'CITTÀ', 'CITY'],
+};
+export const TYPE_TAG_LABELS = {
+  it: { QUARTIERE: 'QUARTIERE', CITTA: 'CITTÀ' },
+  en: { QUARTIERE: 'DISTRICT', CITTA: 'CITY' },
+};
+
+export const SECTION_ALIASES = {
+  DEST:     ['PRESENTAZIONE DELLA DESTINAZIONE', 'DESTINATION OVERVIEW', 'ABOUT THE DESTINATION'],
+  FLIGHT:   ['VOLO CONSIGLIATO', 'RECOMMENDED FLIGHT', 'SUGGESTED FLIGHT'],
+  STAY:     ['ALLOGGIO', 'ACCOMMODATION', 'WHERE TO STAY'],
+  ITINERARY:['ITINERARIO GIORNO PER GIORNO', 'DAY-BY-DAY ITINERARY', 'DAY BY DAY ITINERARY'],
+  LOCAL:    ['ESPERIENZE LOCALI E CUCINA', 'LOCAL EXPERIENCES AND FOOD', 'LOCAL EXPERIENCES & FOOD'],
+  TIPS:     ['CONSIGLI PRATICI', 'PRACTICAL TIPS'],
+  DINING:   ['DOVE MANGIARE - GIORNO PER GIORNO', 'DOVE MANGIARE', 'WHERE TO EAT - DAY BY DAY', 'WHERE TO EAT'],
+  PRICES:   ['PREZZI MEDI', 'AVERAGE PRICES'],
+  CULINARY: ['ESPERIENZE CULINARIE DA NON PERDERE', 'CULINARY EXPERIENCES NOT TO MISS', 'CULINARY EXPERIENCES'],
+  GUIDES:   ['GUIDE TURISTICHE', 'TOUR GUIDES'],
+  LOGISTICS:['LOGISTICA GENERALE', 'GENERAL LOGISTICS'],
+  TRANSPORT:['TRASPORTO', 'TRANSPORT'],
+};
+export const SECTION_LABELS = {
+  it: { DEST:'PRESENTAZIONE DELLA DESTINAZIONE', FLIGHT:'VOLO CONSIGLIATO', STAY:'ALLOGGIO', ITINERARY:'ITINERARIO GIORNO PER GIORNO', LOCAL:'ESPERIENZE LOCALI E CUCINA', TIPS:'CONSIGLI PRATICI', DINING:'DOVE MANGIARE', PRICES:'PREZZI MEDI', CULINARY:'ESPERIENZE CULINARIE DA NON PERDERE', GUIDES:'GUIDE TURISTICHE', LOGISTICS:'LOGISTICA GENERALE', TRANSPORT:'TRASPORTO' },
+  en: { DEST:'DESTINATION OVERVIEW', FLIGHT:'RECOMMENDED FLIGHT', STAY:'ACCOMMODATION', ITINERARY:'DAY-BY-DAY ITINERARY', LOCAL:'LOCAL EXPERIENCES & FOOD', TIPS:'PRACTICAL TIPS', DINING:'WHERE TO EAT', PRICES:'AVERAGE PRICES', CULINARY:'CULINARY EXPERIENCES NOT TO MISS', GUIDES:'TOUR GUIDES', LOGISTICS:'GENERAL LOGISTICS', TRANSPORT:'TRANSPORT' },
+};
+// Etichette bullet dentro il piano ("Cosa vedere/fare/Da non perdere")
+export const BULLET_ALIASES = {
+  SEE: ['Cosa vedere', 'What to see'],
+  DO:  ['Cosa fare', 'What to do'],
+  DONT:['Da non perdere', "Don't miss", 'Not to miss'],
+};
+export const BULLET_LABELS = {
+  it: { SEE:'Cosa vedere', DO:'Cosa fare', DONT:'Da non perdere' },
+  en: { SEE:'What to see', DO:'What to do', DONT:"Don't miss" },
+};
+
 export const translations = {
   it: {
     /* ---- Comuni ---- */
@@ -233,6 +280,41 @@ export const translations = {
     'pl.saveIncomplete': '❌ Itinerario non ancora completo',
     'pl.saving': 'Salvataggio...',
     'pl.saveOk': '✅ Itinerario salvato!',
+    'opt.transport.Auto propria': 'Auto propria',
+    'opt.transport.Auto a noleggio': 'Auto a noleggio',
+    'opt.transport.Moto': 'Moto',
+    'opt.transport.Camper': 'Camper',
+    'opt.transport.Treno': 'Treno',
+    'opt.transport.Bus': 'Bus',
+    'opt.transport.Aereo': 'Aereo',
+    /* UI aggiuntive PlannerPage */
+    'pl.load.season': 'Analizzo stagionalità...',
+    'pl.load.dest': 'Analizzo la destinazione...',
+    'pl.load.revise': 'Rielaboro il piano...',
+    'pl.load.hotels': 'Cerco hotel per ogni città...',
+    'pl.load.draft': 'Ottimizzo gli spostamenti...',
+    'pl.load.food': 'Cerco ristoranti...',
+    'pl.load.final': 'Genero l\'itinerario definitivo...',
+    'pl.s10.multiBase': '🗺️ Soggiorno in {n} basi',
+    'pl.s10.singleBase': '🏨 Alloggio unico',
+    'pl.s10.nights': '{n} notti',
+    'pl.s10.editBasesTitle': '✒️ Modifica basi e distribuzione notti',
+    'pl.s10.selection': '✅ SELEZIONE',
+    'pl.s10.bestValue': '★ Miglior rapporto qualità/prezzo',
+    'pl.s10.bookOn': '🔗 Prenota su Booking.com',
+    'pl.s11.draftTitle': '📋 Bozza itinerario',
+    'pl.s11.good': 'Ottima, procedi',
+    'pl.s11.goodSub': 'Passa alle guide',
+    'pl.s11.regen': 'Rigenera',
+    'pl.s11.regenSub': 'Crea nuova versione',
+    'pl.s13.yes': 'Sì, suggerisci',
+    'pl.s13.yesSub': 'Pranzo e cena per ogni giorno',
+    'pl.s13.no': 'No, scelgo da solo',
+    'pl.s13.noSub': 'Salta questa sezione',
+    'pl.meta.adults': '{n} adulti',
+    'pl.meta.adult': '{n} adulto',
+    'pl.meta.children': '+ {n} bambini',
+    'pl.meta.child': '+ {n} bambino',
   },
 
   en: {
@@ -459,5 +541,40 @@ export const translations = {
     'pl.saveIncomplete': '❌ Itinerary not complete yet',
     'pl.saving': 'Saving...',
     'pl.saveOk': '✅ Itinerary saved!',
+    'opt.transport.Auto propria': 'Own car',
+    'opt.transport.Auto a noleggio': 'Rental car',
+    'opt.transport.Moto': 'Motorbike',
+    'opt.transport.Camper': 'Camper van',
+    'opt.transport.Treno': 'Train',
+    'opt.transport.Bus': 'Bus',
+    'opt.transport.Aereo': 'Plane',
+    /* Additional PlannerPage UI */
+    'pl.load.season': 'Analyzing seasonality...',
+    'pl.load.dest': 'Analyzing the destination...',
+    'pl.load.revise': 'Reworking the plan...',
+    'pl.load.hotels': 'Searching hotels for each city...',
+    'pl.load.draft': 'Optimizing the routes...',
+    'pl.load.food': 'Searching restaurants...',
+    'pl.load.final': 'Generating the final itinerary...',
+    'pl.s10.multiBase': '🗺️ Staying in {n} bases',
+    'pl.s10.singleBase': '🏨 Single accommodation',
+    'pl.s10.nights': '{n} nights',
+    'pl.s10.editBasesTitle': '✒️ Edit bases and night distribution',
+    'pl.s10.selection': '✅ SELECTION',
+    'pl.s10.bestValue': '★ Best value for money',
+    'pl.s10.bookOn': '🔗 Book on Booking.com',
+    'pl.s11.draftTitle': '📋 Itinerary draft',
+    'pl.s11.good': 'Great, proceed',
+    'pl.s11.goodSub': 'Go to guides',
+    'pl.s11.regen': 'Regenerate',
+    'pl.s11.regenSub': 'Create new version',
+    'pl.s13.yes': 'Yes, suggest',
+    'pl.s13.yesSub': 'Lunch and dinner for every day',
+    'pl.s13.no': 'No, I\'ll choose myself',
+    'pl.s13.noSub': 'Skip this section',
+    'pl.meta.adults': '{n} adults',
+    'pl.meta.adult': '{n} adult',
+    'pl.meta.children': '+ {n} children',
+    'pl.meta.child': '+ {n} child',
   },
 };

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useLang } from '../hooks/useLang'
 import { supabase } from '../lib/supabase'
 
 const G = '#C9A84C', GL = '#e8c97a'
@@ -110,12 +111,13 @@ const css = `
 
 export default function DashboardPage() {
   const { user, signOut } = useAuth()
+  const { t, lang } = useLang()
   const navigate = useNavigate()
   const [trips, setTrips] = useState([])
   const [loadingTrips, setLoadingTrips] = useState(true)
   const [selectedTrip, setSelectedTrip] = useState(null)
 
-  const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Viaggiatore'
+  const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || t('dash.defaultName')
 
   useEffect(() => { fetchTrips() }, [])
 
@@ -132,7 +134,7 @@ export default function DashboardPage() {
 
   async function deleteTrip(id, e) {
     e.stopPropagation()
-    if (!confirm('Eliminare questo itinerario?')) return
+    if (!confirm(t('dash.confirmDelete'))) return
     await supabase.from('itineraries').delete().eq('id', id)
     setTrips(trips.filter(t => t.id !== id))
   }
@@ -154,40 +156,40 @@ export default function DashboardPage() {
           </div>
           <div className="nav-right">
             <div className="user-badge">👤 {userName}</div>
-            <button className="btn-sm" onClick={handleSignOut}>Esci</button>
-            <button className="btn-sm-gold" onClick={() => navigate('/planner')}>+ Nuovo viaggio</button>
+            <button className="btn-sm" onClick={handleSignOut}>{t('dash.signOut')}</button>
+            <button className="btn-sm-gold" onClick={() => navigate('/planner')}>{t('dash.newTrip')}</button>
           </div>
         </nav>
 
         <div className="dash-body">
 
           <div className="welcome">
-            <div className="welcome-sub">✦ Il tuo profilo</div>
-            <div className="welcome-title">Bentornato/a, {userName.split(' ')[0]}.</div>
-            <div className="welcome-hint">Qui trovi tutti i tuoi itinerari salvati.</div>
+            <div className="welcome-sub">{t('dash.welcome.eyebrow')}</div>
+            <div className="welcome-title">{t('dash.welcome.title').replace('{name}', userName.split(' ')[0])}</div>
+            <div className="welcome-hint">{t('dash.welcome.hint')}</div>
           </div>
 
           <div className="new-trip-card">
             <div className="ntc-text">
-              <div className="ntc-title">✈️ Pianifica un nuovo viaggio</div>
-              <div className="ntc-sub">Destinazione, date, budget — l'AI costruisce tutto il resto.</div>
+              <div className="ntc-title">{t('dash.card.title')}</div>
+              <div className="ntc-sub">{t('dash.card.sub')}</div>
             </div>
-            <button className="btn-new" onClick={() => navigate('/planner')}>Inizia ora →</button>
+            <button className="btn-new" onClick={() => navigate('/planner')}>{t('dash.card.start')}</button>
           </div>
 
           <div className="section-hd">
-            <div className="section-title">I tuoi itinerari</div>
-            <div className="section-count">{trips.length} salvati</div>
+            <div className="section-title">{t('dash.section.title')}</div>
+            <div className="section-count">{t('dash.section.count').replace('{n}', trips.length)}</div>
           </div>
 
           {loadingTrips ? (
-            <div className="loading-trips">⏳ Carico i tuoi viaggi...</div>
+            <div className="loading-trips">{t('dash.loading')}</div>
           ) : trips.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">🗺️</div>
               <div className="empty-text">
-                Non hai ancora pianificato nessun viaggio.<br />
-                Clicca su "Inizia ora" per creare il tuo primo itinerario!
+                {t('dash.empty.text1')}<br />
+                {t('dash.empty.text2')}
               </div>
             </div>
           ) : (
@@ -202,7 +204,7 @@ export default function DashboardPage() {
                     ))}
                   </div>
                   <div className="tc-date">
-                    Salvato il {new Date(trip.created_at).toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })}
+                    {t('dash.savedOn').replace('{date}', new Date(trip.created_at).toLocaleDateString(t('dash.dateLocale'), { day:'numeric', month:'long', year:'numeric' }))}
                   </div>
                 </div>
               ))}
@@ -219,7 +221,7 @@ export default function DashboardPage() {
                 <button className="modal-close" onClick={() => setSelectedTrip(null)}>✕</button>
               </div>
               <div className="modal-body">
-                {selectedTrip.itinerary_text || 'Nessun dettaglio disponibile.'}
+                {selectedTrip.itinerary_text || t('dash.modal.noDetail')}
               </div>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
+import { useLang } from '../hooks/useLang';
 
 /* ─── Design tokens ─────────────────────────────────────────────────────── */
 const G   = '#C9A84C';
@@ -500,6 +501,7 @@ function HCard({ h, bi, city: cityName, budget, dates, selKeys, setSelKeys, selN
 /* ─── Main component ────────────────────────────────────────────────────── */
 export default function PlannerPage() {
   const { user } = useAuth();
+  const { lang, t } = useLang();
 
   /* ── step & destination ── */
   const [step, setStep]         = useState(1);
@@ -524,7 +526,6 @@ export default function PlannerPage() {
   /* ── transport ── */
   const [transport, setTransport]   = useState(null);
   const [distClose, setDistClose]   = useState(null);
-  const [lang, setLang]             = useState('it');
 
   /* ── AI text ── */
   const [aiPer, setAiPer]         = useState(''); const [aiPerLoad, setAiPerLoad] = useState(false);
@@ -577,6 +578,9 @@ export default function PlannerPage() {
   // Nome della lingua attiva, usato nei prompt AI (Fase 1: IT + EN)
   const LANGS_MAP = { it: 'italiano', en: 'inglese' };
   function langName() { return LANGS_MAP[lang] || 'italiano'; }
+  // Traduce l'etichetta di un'opzione mantenendo il valore italiano interno (Opzione 2).
+  // Es. optLabel('ttype','Famiglia') -> 'Family' in EN, 'Famiglia' in IT. Fallback: il valore stesso.
+  function optLabel(kind, value) { return t(`opt.${kind}.${value}`) || value; }
 
   // Parametri date per Booking: aggiunti SOLO se l'utente ha scelto date esatte
   // dal calendario (startDate + endDate). Con mese/stagione restituisce '' (nessuna data).
@@ -632,9 +636,9 @@ export default function PlannerPage() {
 
   /* ── save to Supabase ── */
   async function saveItinerary() {
-    if (!user) { setSaveStatus('Accedi per salvare'); return; }
-    if (!dest || !finText) { setSaveStatus('❌ Itinerario non ancora completo'); return; }
-    setSaveStatus('Salvataggio...');
+    if (!user) { setSaveStatus(t('pl.saveLogin')); return; }
+    if (!dest || !finText) { setSaveStatus(t('pl.saveIncomplete')); return; }
+    setSaveStatus(t('pl.saving'));
     try {
       const { error } = await supabase.from('itineraries').insert({
         user_id:        user.id,
@@ -656,7 +660,7 @@ export default function PlannerPage() {
         console.error('Errore salvataggio Supabase:', error);
         setSaveStatus('❌ ' + (error.message || 'Errore nel salvataggio'));
       } else {
-        setSaveStatus('✅ Itinerario salvato!');
+        setSaveStatus(t('pl.saveOk'));
         setTimeout(() => setSaveStatus(''), 4000);
       }
     } catch (e) {
@@ -1044,7 +1048,7 @@ export default function PlannerPage() {
     const nodes = [
       <div className="p-sn" key={snum}>
         <div className={`p-sc${step === snum ? ' act' : step > snum ? ' dn' : ''}`}>{step > snum ? '✓' : snum}</div>
-        <div className={`p-sl${step === snum ? ' act' : ''}`}>{label}</div>
+        <div className={`p-sl${step === snum ? ' act' : ''}`}>{optLabel('step', label)}</div>
       </div>
     ];
     if (si < STEPS.length - 1) nodes.push(<div className={`p-cn${step > snum ? ' dn' : ''}`} key={`c${snum}`} />);
@@ -1068,40 +1072,27 @@ export default function PlannerPage() {
       <style>{CSS}</style>
       <div className="planner-wrap">
 
-        {/* Selettore lingua (in alto a destra) */}
-        <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:4 }}>
-          <select
-            value={lang}
-            onChange={e => setLang(e.target.value)}
-            style={{ background:'#111', color:GL, border:`.5px solid ${BRD}`, borderRadius:8, padding:'6px 10px', fontSize:13, fontFamily:'Inter,sans-serif', cursor:'pointer' }}
-            aria-label="Lingua"
-          >
-            <option value="it">Italiano</option>
-            <option value="en">English</option>
-          </select>
-        </div>
-
         {/* Header */}
         <div className="p-logo">
           <div className="p-li">✈</div>
           <div className="p-lt">Travel <span>AI</span> Agent</div>
         </div>
-        <div className="p-sub">IL TUO CONSULENTE DI VIAGGIO PERSONALE</div>
+        <div className="p-sub">{t('pl.sub')}</div>
         <div className="p-dl" />
 
         {/* Progress */}
         {step <= 14 && <div className="p-prog">{progressBar}</div>}
         {step > 1 && step <= 14 && (
-          <button className="p-back" onClick={goBack}>← Torna indietro</button>
+          <button className="p-back" onClick={goBack}>{t('pl.back')}</button>
         )}
 
         {/* ── Step 1: Destinazione ── */}
         {step === 1 && (
           <div className="p-card">
-            <div className="p-tt">🌍 Dove vuoi andare?</div>
-            <div className="p-ht">Inserisci una destinazione, paese o regione</div>
+            <div className="p-tt">{t('pl.s1.title')}</div>
+            <div className="p-ht">{t('pl.s1.hint')}</div>
             <div className="p-ir">
-              <input className="p-inp" placeholder="Es. Italia, Giappone, Kenya..." value={inp}
+              <input className="p-inp" placeholder={t('pl.s1.ph')} value={inp}
                 onChange={e => setInp(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && inp.trim()) onDest(); }} />
               <button className="p-go" onClick={() => { if (inp.trim()) onDest(); }}>›</button>
@@ -1112,39 +1103,39 @@ export default function PlannerPage() {
         {/* ── Step 2: Periodo ── */}
         {step === 2 && (
           <div className="p-card">
-            <div className="p-tt">📅 Quando vuoi partire?</div>
-            <div className="p-ht">Stagionalità per {dest}</div>
+            <div className="p-tt">{t('pl.s2.title')}</div>
+            <div className="p-ht">{t('pl.s2.hint').replace('{dest}', dest)}</div>
             <ABox text={aiPer} loading={aiPerLoad} lt="Analizzo stagionalità..." lang={lang} />
             <div style={{ marginBottom:'1.2rem' }}>
-              <div style={{ fontSize:12, color:G, marginBottom:8, fontWeight:600 }}>🗓️ Scegli le date esatte (opzionale)</div>
+              <div style={{ fontSize:12, color:G, marginBottom:8, fontWeight:600 }}>{t('pl.s2.dateHint')}</div>
               <div className="p-dpick">
                 <div>
-                  <div style={{ fontSize:11, color:'#777', marginBottom:4 }}>Partenza</div>
+                  <div style={{ fontSize:11, color:'#777', marginBottom:4 }}>{t('pl.s2.depart')}</div>
                   <input type="date" className="p-inp" value={startDate} onChange={e => setStartDate(e.target.value)} />
                 </div>
                 <div>
-                  <div style={{ fontSize:11, color:'#777', marginBottom:4 }}>Ritorno</div>
+                  <div style={{ fontSize:11, color:'#777', marginBottom:4 }}>{t('pl.s2.return')}</div>
                   <input type="date" className="p-inp" value={endDate} onChange={e => setEndDate(e.target.value)} />
                 </div>
               </div>
-              {startDate && endDate && <Btn label="Conferma date →" style={{ marginTop:10 }} onClick={confirmDates} />}
+              {startDate && endDate && <Btn label={t('pl.s2.confirmDates')} style={{ marginTop:10 }} onClick={confirmDates} />}
             </div>
-            <div style={{ fontSize:12, color:'#666', margin:'1rem 0 .8rem', borderTop:`.5px solid ${BRD}`, paddingTop:'1rem' }}>Oppure scegli un periodo generico</div>
-            <div className="p-chips">{MONTHS.map(mo => <Chip key={mo} label={mo} onClick={() => { setPeriod(mo); setTripYear(detectYear(mo)); setStep(3); }} />)}</div>
+            <div style={{ fontSize:12, color:'#666', margin:'1rem 0 .8rem', borderTop:`.5px solid ${BRD}`, paddingTop:'1rem' }}>{t('pl.s2.orGeneric')}</div>
+            <div className="p-chips">{MONTHS.map(mo => <Chip key={mo} label={optLabel('month', mo)} onClick={() => { setPeriod(mo); setTripYear(detectYear(mo)); setStep(3); }} />)}</div>
           </div>
         )}
 
         {/* ── Step 3: Viaggiatori ── */}
         {step === 3 && (
           <div className="p-card">
-            <div className="p-tt">👥 Chi viaggia?</div>
-            <div className="p-ht">Tipo di gruppo</div>
+            <div className="p-tt">{t('pl.s3.title')}</div>
+            <div className="p-ht">{t('pl.s3.hint')}</div>
             <div className="p-chips" style={{ marginBottom:'1.2rem' }}>
-              {TTYPES.map(t => <Chip key={t} label={t} sel={travType === t} onClick={() => setTravType(t)} />)}
+              {TTYPES.map(tt => <Chip key={tt} label={optLabel('ttype', tt)} sel={travType === tt} onClick={() => setTravType(tt)} />)}
             </div>
             {['Gruppo di amici','Famiglia','Gruppo con bambini'].includes(travType) && (
               <div className="p-sep">
-                <div className="p-slbl">Adulti</div>
+                <div className="p-slbl">{t('pl.s3.adults')}</div>
                 <div className="p-nr">
                   <button className="p-nb" onClick={() => setAdults(a => Math.max(1, a - 1))}>−</button>
                   <span className="p-nv">{adults}</span>
@@ -1154,7 +1145,7 @@ export default function PlannerPage() {
             )}
             {['Famiglia','Gruppo con bambini'].includes(travType) && (
               <div className="p-sep">
-                <div className="p-slbl">Bambini</div>
+                <div className="p-slbl">{t('pl.s3.children')}</div>
                 <div className="p-nr">
                   <button className="p-nb" onClick={() => { setChildren(c => Math.max(0,c-1)); setChildAges(p => p.slice(0,-1)); }}>−</button>
                   <span className="p-nv">{children}</span>
@@ -1162,14 +1153,14 @@ export default function PlannerPage() {
                 </div>
                 {children > 0 && (
                   <div>
-                    <div className="p-slbl">Età dei bambini</div>
+                    <div className="p-slbl">{t('pl.s3.childAges')}</div>
                     {Array.from({ length: children }, (_, ci) => (
                       <div className="p-ar" key={ci}>
-                        <span className="p-alb">Bambino {ci + 1}</span>
+                        <span className="p-alb">{t('pl.s3.child').replace('{n}', ci + 1)}</span>
                         <div className="p-acs">
                           {CAGES.map(a => (
                             <div key={a} className={`p-ac${childAges[ci] === a ? ' sel' : ''}`}
-                              onClick={() => setChildAges(p => { const ag = [...p]; ag[ci] = a; return ag; })}>{a}</div>
+                              onClick={() => setChildAges(p => { const ag = [...p]; ag[ci] = a; return ag; })}>{optLabel('cage', a)}</div>
                           ))}
                         </div>
                       </div>
@@ -1178,38 +1169,38 @@ export default function PlannerPage() {
                 )}
               </div>
             )}
-            {travType && <Btn label="Continua →" style={{ marginTop:'1.2rem' }} onClick={() => { if (duration && duration.includes('giorni esatti')) setStep(5); else setStep(4); }} />}
+            {travType && <Btn label={t('pl.continue')} style={{ marginTop:'1.2rem' }} onClick={() => { if (duration && duration.includes('giorni esatti')) setStep(5); else setStep(4); }} />}
           </div>
         )}
 
         {/* ── Step 4: Durata ── */}
         {step === 4 && (
           <div className="p-card">
-            <div className="p-tt">⏳ Per quanto tempo?</div>
-            <div className="p-ht">Giorni disponibili</div>
-            <div className="p-chips">{DURS.map(d => <Chip key={d} label={d} onClick={() => { setDuration(d); setStep(5); }} />)}</div>
+            <div className="p-tt">{t('pl.s4.title')}</div>
+            <div className="p-ht">{t('pl.s4.hint')}</div>
+            <div className="p-chips">{DURS.map(d => <Chip key={d} label={optLabel('dur', d)} onClick={() => { setDuration(d); setStep(5); }} />)}</div>
           </div>
         )}
 
         {/* ── Step 5: Tipologia ── */}
         {step === 5 && (
           <div className="p-card">
-            <div className="p-tt">✨ Che tipo di viaggio?</div>
-            <div className="p-ht">Stile preferito</div>
-            <div className="p-chips">{STYLES.map(s => <Chip key={s} label={s} onClick={() => { setStyle(s); setStep(6); }} />)}</div>
+            <div className="p-tt">{t('pl.s5.title')}</div>
+            <div className="p-ht">{t('pl.s5.hint')}</div>
+            <div className="p-chips">{STYLES.map(s => <Chip key={s} label={optLabel('style', s)} onClick={() => { setStyle(s); setStep(6); }} />)}</div>
           </div>
         )}
 
         {/* ── Step 6: Budget ── */}
         {step === 6 && (
           <div className="p-card">
-            <div className="p-tt">💳 Budget?</div>
-            <div className="p-ht">Adattiamo tutto alle tue aspettative</div>
+            <div className="p-tt">{t('pl.s6.title')}</div>
+            <div className="p-ht">{t('pl.s6.hint')}</div>
             <div className="p-bc">
               {BUDGETS.map(b => (
                 <div key={b.k} className={`p-bci${budget === b.k ? ' sel' : ''}`} onClick={() => { setBudget(b.k); setStep(7); }}>
-                  <div style={{ fontSize:14, color:GL, fontWeight:600, marginBottom:4 }}>{b.l}</div>
-                  <div style={{ fontSize:11, color:'#666', lineHeight:1.5 }}>{b.d}</div>
+                  <div style={{ fontSize:14, color:GL, fontWeight:600, marginBottom:4 }}>{optLabel('budget', b.k + '.l')}</div>
+                  <div style={{ fontSize:11, color:'#666', lineHeight:1.5 }}>{optLabel('budget', b.k + '.d')}</div>
                 </div>
               ))}
             </div>
@@ -1219,10 +1210,10 @@ export default function PlannerPage() {
         {/* ── Step 7: Partenza ── */}
         {step === 7 && (
           <div className="p-card">
-            <div className="p-tt">🛫 Da dove parti?</div>
-            <div className="p-ht">Città di partenza</div>
+            <div className="p-tt">{t('pl.s7.title')}</div>
+            <div className="p-ht">{t('pl.s7.hint')}</div>
             <div className="p-ir">
-              <input className="p-inp" placeholder="Es. Milano, Roma..." value={inp}
+              <input className="p-inp" placeholder={t('pl.s7.ph')} value={inp}
                 onChange={e => setInp(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && inp.trim()) { setDeparture(inp.trim()); } }} />
               <button className="p-go" onClick={() => { if (inp.trim()) setDeparture(inp.trim()); }}>›</button>
@@ -1231,15 +1222,15 @@ export default function PlannerPage() {
             {/* Conferma citta salvata */}
             {departure && (
               <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#1a1400', border:`.5px solid ${G}`, borderRadius:20, padding:'4px 12px', fontSize:12, color:GL, marginTop:12 }}>
-                Partenza da {departure}
+                {t('pl.s7.partFrom').replace('{dep}', departure)}
               </div>
             )}
 
             {/* Selettore mezzo: appare dopo aver indicato la partenza */}
             {departure && (
               <div style={{ background:'#111', border:`.5px solid ${transport ? G : '#333'}`, borderRadius:12, padding:'1.2rem 1.4rem', marginTop:'1.2rem' }}>
-                <div style={{ fontSize:13, color:GL, fontWeight:600, marginBottom:8 }}>Con che mezzo vuoi viaggiare?</div>
-                <div style={{ fontSize:12, color:'#888', marginBottom:12 }}>Il mezzo scelto influenzerà l'itinerario (soste, tappe intermedie...)</div>
+                <div style={{ fontSize:13, color:GL, fontWeight:600, marginBottom:8 }}>{t('pl.s7.transport')}</div>
+                <div style={{ fontSize:12, color:'#888', marginBottom:12 }}>Il mezzo scelto {t('pl.s7.transportHint')}</div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
                   {['Auto propria','Auto a noleggio','Moto','Camper','Treno','Bus','Aereo'].map(opt => (
                     <div key={opt} className={'p-chip' + (transport === opt ? ' sel' : '')} onClick={() => setTransport(opt)}>{opt}</div>
@@ -1252,10 +1243,10 @@ export default function PlannerPage() {
             {departure && (
               <>
                 {!transport && (
-                  <div style={{ fontSize:12, color:'#e8a24c', margin:'.8rem 0 0' }}>Seleziona un mezzo di trasporto per continuare</div>
+                  <div style={{ fontSize:12, color:'#e8a24c', margin:'.8rem 0 0' }}>{t('pl.s7.selectTransport')}</div>
                 )}
                 <Btn
-                  label="Genera il piano →"
+                  label={t('pl.s7.genPlan')}
                   disabled={!transport}
                   style={{ marginTop:12 }}
                   onClick={() => { if (transport) genPlan(departure); }}
@@ -1269,22 +1260,22 @@ export default function PlannerPage() {
         {step === 8 && (
           <div className="p-card" style={{ maxWidth:700 }}>
             <Badge text={`${dest} · ${duration} · ${period} ${tripYear}`} />
-            <div className="p-tt">🗺️ Il tuo piano di viaggio</div>
-            <div className="p-ht">Ecco le città e le esperienze da non perdere</div>
+            <div className="p-tt">{t('pl.s8.title')}</div>
+            <div className="p-ht">{t('pl.s8.hint')}</div>
             <ABox text={planText} loading={planLoad} lt="Analizzo la destinazione..." lang={lang} />
             {!planLoad && planText && (
               <div>
                 {/* Promemoria del mezzo gia scelto allo step 7 */}
                 {transport && (
                   <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#1a1400', border:`.5px solid ${G}`, borderRadius:20, padding:'4px 12px', fontSize:12, color:GL, margin:'1rem 0 0' }}>
-                    🧭 Viaggio in {transport}
+                    {t('pl.s8.travelBy').replace('{transport}', transport)}
                   </div>
                 )}
-                <div style={{ fontSize:13, color:'#888', margin:'1rem 0 .5rem' }}>Vuoi aggiungere o modificare qualcosa?</div>
-                <textarea className="p-ta" placeholder="Es. Aggiungi Venezia, voglio una notte in glamping..." value={mods} onChange={e => setMods(e.target.value)} />
+                <div style={{ fontSize:13, color:'#888', margin:'1rem 0 .5rem' }}>{t('pl.s8.modifyQ')}</div>
+                <textarea className="p-ta" placeholder={t('pl.s8.modifyPh')} value={mods} onChange={e => setMods(e.target.value)} />
                 <div className="p-brow">
                   <Btn
-                    label={mods.trim() ? 'Rielabora →' : 'Vai agli alloggi →'}
+                    label={mods.trim() ? t('pl.s8.rework') : t('pl.s8.toHotels')}
                     onClick={() => { if (mods.trim()) genRevised(); else genHotels(false); }}
                   />
                 </div>
@@ -1297,15 +1288,15 @@ export default function PlannerPage() {
         {step === 9 && (
           <div className="p-card" style={{ maxWidth:700 }}>
             <Badge text={`Piano aggiornato · ${dest}`} />
-            <div className="p-tt">Piano rivisto</div>
-            <div className="p-ht">Ho integrato le tue indicazioni</div>
+            <div className="p-tt">{t('pl.s9.title')}</div>
+            <div className="p-ht">{t('pl.s9.hint')}</div>
             <ABox text={revText} loading={revLoad} lt="Rielaboro il piano..." lang={lang} />
             {!revLoad && revText && (
               <div>
-                <div style={{ fontSize:13, color:'#888', margin:'1rem 0 .5rem' }}>Altre modifiche o procediamo?</div>
-                <textarea className="p-ta" placeholder="Altre modifiche? Lascia vuoto per confermare..." value={mods} onChange={e => setMods(e.target.value)} />
+                <div style={{ fontSize:13, color:'#888', margin:'1rem 0 .5rem' }}>{t('pl.s9.moreQ')}</div>
+                <textarea className="p-ta" placeholder={t('pl.s9.morePh')} value={mods} onChange={e => setMods(e.target.value)} />
                 <div className="p-brow">
-                  <Btn label={mods.trim() ? 'Rielabora ancora →' : 'Confermo, vai agli alloggi →'} onClick={() => { if (mods.trim()) genRevised(); else genHotels(false); }} />
+                  <Btn label={mods.trim() ? t('pl.s9.reworkMore') : t('pl.s9.confirmHotels')} onClick={() => { if (mods.trim()) genRevised(); else genHotels(false); }} />
                 </div>
               </div>
             )}
@@ -1316,8 +1307,8 @@ export default function PlannerPage() {
         {step === 10 && (
           <div className="p-card" style={{ maxWidth:720 }}>
             <Badge text={`🏨 Alloggi · ${dest} ${tripYear}`} />
-            <div className="p-tt">Scegli il tuo alloggio</div>
-            <div className="p-ht">Strutture per fascia {budget}, una base per ogni area del tuo itinerario</div>
+            <div className="p-tt">{t('pl.s10.title')}</div>
+            <div className="p-ht">{t('pl.s10.hint').replace('{budget}', budget)}</div>
             {hotelLoad && hotelBases.length === 0 && <div className="p-aib"><Dots text="Cerco hotel per ogni città..." /></div>}
             {hotelBases.length > 0 && (
               <div>
@@ -1365,13 +1356,13 @@ export default function PlannerPage() {
                   </div>
                 )}
                 {selKeys.length > 0 && !showCust && (
-                  <Btn label="✅ Confermo – Genera bozza →" style={{ marginBottom:10 }} onClick={() => { const hn = selNames.join(' | '); setSelStr(hn); genDraft(hn); }} />
+                  <Btn label={t('pl.s10.confirmDraft')} style={{ marginBottom:10 }} onClick={() => { const hn = selNames.join(' | '); setSelStr(hn); genDraft(hn); }} />
                 )}
                 {!showCust && !showHotelNotes && (
                   <div style={{ display:'flex', gap:10, marginTop:8, flexWrap:'wrap' }}>
-                    <Btn ghost label="➕ Altri hotel" onClick={() => { const names = hotelBases.flatMap(b => b.hotels.map(h => h.name || '')); setExclHotels([...exclHotels, ...names]); genHotels(true); }} />
-                    <Btn ghost label="✏️ Inserisci il tuo" onClick={() => { setShowCust(true); setSelKeys([]); setSelNames([]); }} />
-                    <Btn ghost label="✒️ Modifica basi e notti" onClick={() => setShowHotelNotes(true)} />
+                    <Btn ghost label={t('pl.s10.moreHotels')} onClick={() => { const names = hotelBases.flatMap(b => b.hotels.map(h => h.name || '')); setExclHotels([...exclHotels, ...names]); genHotels(true); }} />
+                    <Btn ghost label={t('pl.s10.customHotel')} onClick={() => { setShowCust(true); setSelKeys([]); setSelNames([]); }} />
+                    <Btn ghost label={t('pl.s10.editBases')} onClick={() => setShowHotelNotes(true)} />
                   </div>
                 )}
 
@@ -1379,7 +1370,7 @@ export default function PlannerPage() {
                 {showHotelNotes && (
                   <div style={{ background:'#111', border:`.5px solid ${G}`, borderRadius:12, padding:'1.2rem 1.4rem', marginTop:'1rem' }}>
                     <div style={{ fontSize:13, color:GL, fontWeight:600, marginBottom:4 }}>✒️ Modifica basi e distribuzione notti</div>
-                    <div style={{ fontSize:12, color:'#888', marginBottom:'0.8rem', lineHeight:1.6 }}>Indica come vorresti cambiare gli alloggi: elimina una base, redistribuisci le notti, aggiungi gite in giornata...</div>
+                    <div style={{ fontSize:12, color:'#888', marginBottom:'0.8rem', lineHeight:1.6 }}>{t('pl.s10.editHint')}</div>
                     {hotelBases.length > 0 && (
                       <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:'0.8rem' }}>
                         {hotelBases.map((b, bi) => (
@@ -1397,11 +1388,11 @@ export default function PlannerPage() {
                       </div>
                     )}
                     <textarea className="p-ta" style={{ marginBottom:'0.8rem' }}
-                      placeholder="Es. Voglio eliminare Santa Barbara e aggiungere una notte in più a Los Angeles."
+                      placeholder={t('pl.s10.editPh')}
                       value={hotelNotes} onChange={e => setHotelNotes(e.target.value)} />
                     <div style={{ display:'flex', gap:10 }}>
-                      <Btn label={hotelLoad ? '⏳ Rielaboro...' : '🔄 Rielabora alloggi →'} onClick={() => { if (!hotelLoad && hotelNotes.trim()) genHotelsRevised(); }} disabled={hotelLoad || !hotelNotes.trim()} />
-                      <Btn ghost label="Annulla" style={{ maxWidth:120 }} onClick={() => setShowHotelNotes(false)} />
+                      <Btn label={hotelLoad ? t('pl.s10.reworking') : t('pl.s10.reworkHotels')} onClick={() => { if (!hotelLoad && hotelNotes.trim()) genHotelsRevised(); }} disabled={hotelLoad || !hotelNotes.trim()} />
+                      <Btn ghost label={t('pl.s10.cancel')} style={{ maxWidth:120 }} onClick={() => setShowHotelNotes(false)} />
                     </div>
                   </div>
                 )}
@@ -1409,18 +1400,18 @@ export default function PlannerPage() {
                 {/* Hotel personalizzato */}
                 {showCust && (
                   <div style={{ marginTop:'.5rem' }}>
-                    <div style={{ fontSize:12, color:G, marginBottom:6 }}>Nome hotel (o più separati da virgola)</div>
+                    <div style={{ fontSize:12, color:G, marginBottom:6 }}>{t('pl.s10.hotelName')}</div>
                     <div className="p-ir">
-                      <input className="p-inp" placeholder="Es. Bauer Palazzo Venezia..." value={custH}
+                      <input className="p-inp" placeholder={t('pl.s10.hotelPh')} value={custH}
                         onChange={e => setCustH(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter' && custH.trim()) { setSelStr(custH.trim()); setSelNames([custH.trim()]); setShowCust(false); } }} />
                       <button className="p-go" onClick={() => { if (custH.trim()) { setSelStr(custH.trim()); setSelNames([custH.trim()]); setShowCust(false); } }}>✓</button>
                     </div>
-                    <Btn ghost label="← Torna alle proposte" style={{ marginTop:8 }} onClick={() => setShowCust(false)} />
+                    <Btn ghost label={t('pl.s10.backToProposals')} style={{ marginTop:8 }} onClick={() => setShowCust(false)} />
                   </div>
                 )}
                 {!showCust && !showHotelNotes && selStr && selKeys.length === 0 && (
-                  <Btn label={`✅ Scelgo ${selStr} →`} style={{ marginTop:10 }} onClick={() => genDraft(selStr)} />
+                  <Btn label={t('pl.s10.chooseStr').replace('{str}', selStr)} style={{ marginTop:10 }} onClick={() => genDraft(selStr)} />
                 )}
               </div>
             )}
@@ -1431,12 +1422,12 @@ export default function PlannerPage() {
         {step === 11 && (
           <div className="p-card" style={{ maxWidth:700 }}>
             <Badge text="📋 Bozza itinerario" />
-            <div className="p-tt">Prima bozza</div>
-            <div className="p-ht">Ottimizzato per il tuo alloggio</div>
+            <div className="p-tt">{t('pl.s11.title')}</div>
+            <div className="p-ht">{t('pl.s11.hint')}</div>
             <ABox text={draftText} loading={draftLoad} lt="Ottimizzo gli spostamenti..." lang={lang} />
             {!draftLoad && draftText && (
               <div>
-                <div style={{ fontSize:13, color:'#888', margin:'1rem 0 .8rem' }}>Come trovi questa bozza?</div>
+                <div style={{ fontSize:13, color:'#888', margin:'1rem 0 .8rem' }}>{t('pl.s11.howQ')}</div>
                 <div className="p-yn">
                   <YN icon="✅" title="Ottima, procedi" sub="Passa alle guide" onClick={() => setStep(12)} />
                   <YN icon="🔄" title="Rigenera" sub="Crea nuova versione" onClick={() => genDraft(selStr)} />
@@ -1450,43 +1441,43 @@ export default function PlannerPage() {
         {step === 12 && (
           <div className="p-card" style={{ maxWidth:780 }}>
             <Badge text={`🧭 Guide · ${dest}`} />
-            <div className="p-tt">Vuoi una guida turistica?</div>
-            <div className="p-ht">Guide locali certificate lungo il percorso</div>
+            <div className="p-tt">{t('pl.s12.title')}</div>
+            <div className="p-ht">{t('pl.s12.hint')}</div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, alignItems:'start' }}>
               <div>
                 {guide === null && (
                   <div className="p-yn">
-                    <YN icon="🙋" title="Sì, voglio una guida" sub="Scegli giorni e lingua" onClick={() => setGuide('yes')} />
-                    <YN icon="🚶" title="No, esploro da solo" sub="Procedi senza guida" onClick={() => { setGuide(false); setStep(13); }} />
+                    <YN icon="🙋" title="{t('pl.s12.yesGuide')}" sub="{t('pl.s12.yesGuideSub')}" onClick={() => setGuide('yes')} />
+                    <YN icon="🚶" title="{t('pl.s12.noGuide')}" sub="{t('pl.s12.noGuideSub')}" onClick={() => { setGuide(false); setStep(13); }} />
                   </div>
                 )}
                 {guide === 'yes' && (
                   <div>
-                    <div style={{ fontSize:12, color:G, marginBottom:6, marginTop:'.5rem' }}>In quali giorni?</div>
+                    <div style={{ fontSize:12, color:G, marginBottom:6, marginTop:'.5rem' }}>{t('pl.s12.whichDays')}</div>
                     <div className="p-chips" style={{ marginBottom:'1rem' }}>
-                      {['Tutto il viaggio','Solo alcuni giorni'].map(o => <Chip key={o} label={o} sel={guideDays === o} onClick={() => setGuideDays(o)} />)}
+                      {['Tutto il viaggio','Solo alcuni giorni'].map(o => <Chip key={o} label={o === 'Tutto il viaggio' ? t('pl.s12.allTrip') : t('pl.s12.someDays')} sel={guideDays === o} onClick={() => setGuideDays(o)} />)}
                     </div>
                     {guideDays === 'Solo alcuni giorni' && (
-                      <input className="p-inp" style={{ marginBottom:'1rem', width:'100%' }} placeholder="Es. Giorno 1, Giorno 3..." value={guideCustom} onChange={e => setGuideCustom(e.target.value)} />
+                      <input className="p-inp" style={{ marginBottom:'1rem', width:'100%' }} placeholder={t('pl.s12.daysPh')} value={guideCustom} onChange={e => setGuideCustom(e.target.value)} />
                     )}
-                    <div style={{ fontSize:12, color:G, marginBottom:6 }}>Lingua della guida</div>
+                    <div style={{ fontSize:12, color:G, marginBottom:6 }}>{t('pl.s12.guideLang')}</div>
                     <div className="p-chips" style={{ marginBottom:'1.4rem' }}>
-                      {LANGS.map(l => <Chip key={l} label={l} sel={guideLang === l} onClick={() => setGuideLang(l)} />)}
+                      {LANGS.map(l => <Chip key={l} label={optLabel('lang', l)} sel={guideLang === l} onClick={() => setGuideLang(l)} />)}
                     </div>
-                    <Btn label="✅ Confermo →" onClick={() => { setGuide({ days: guideDays === 'Solo alcuni giorni' ? guideCustom : 'Tutto il viaggio', language: guideLang }); setStep(13); }} />
+                    <Btn label={t('pl.s12.confirm')} onClick={() => { setGuide({ days: guideDays === 'Solo alcuni giorni' ? guideCustom : 'Tutto il viaggio', language: guideLang }); setStep(13); }} />
                   </div>
                 )}
               </div>
               <div style={{ background:'#111', border:'.5px solid #2a2a2a', borderRadius:12, padding:'14px 16px', maxHeight:360, overflowY:'auto' }}>
-                <div style={{ fontSize:11, letterSpacing:'2px', color:G, textTransform:'uppercase', fontWeight:600, marginBottom:'0.8rem' }}>Riepilogo itinerario</div>
+                <div style={{ fontSize:11, letterSpacing:'2px', color:G, textTransform:'uppercase', fontWeight:600, marginBottom:'0.8rem' }}>{t('pl.s12.recap')}</div>
                 {draftClusters.length === 0
-                  ? <div style={{ fontSize:12, color:'#666' }}>La bozza dell'itinerario non è ancora disponibile.</div>
+                  ? <div style={{ fontSize:12, color:'#666' }}>{t('pl.s12.noDraft')}</div>
                   : draftClusters.map((g, gi) => (
                     <div key={gi} style={{ marginBottom:'1rem', paddingBottom:'0.8rem', borderBottom: gi < draftClusters.length - 1 ? '.5px solid #1a1a1a' : 'none' }}>
                       <div style={{ fontSize:12, color:GL, fontWeight:600, marginBottom:'0.4rem' }}>{g.title}</div>
                       {g.items.length > 0
                         ? g.items.map((it, ii) => <div key={ii} style={{ display:'flex', gap:6, fontSize:11, color:'#aaa', marginBottom:2 }}><span style={{ color:G, flexShrink:0 }}>◆</span><span>{it}</span></div>)
-                        : <div style={{ fontSize:11, color:'#555' }}>Attività da definire</div>
+                        : <div style={{ fontSize:11, color:'#555' }}>{t('pl.s12.toDefine')}</div>
                       }
                     </div>
                   ))
@@ -1500,8 +1491,8 @@ export default function PlannerPage() {
         {step === 13 && (
           <div className="p-card" style={{ maxWidth:700 }}>
             <Badge text={`🍽️ Ristorazione · ${dest}`} />
-            <div className="p-tt">Suggerimenti culinari?</div>
-            <div className="p-ht">Ristoranti e locali · budget {budget}</div>
+            <div className="p-tt">{t('pl.s13.title')}</div>
+            <div className="p-ht">{t('pl.s13.hint').replace('{budget}', budget)}</div>
             {!foodText && !foodLoad && (
               <div className="p-yn">
                 <YN icon="🍽️" title="Sì, suggerisci" sub="Pranzo e cena per ogni giorno" onClick={() => { setWantsFood(true); genFood(); }} />
@@ -1511,7 +1502,7 @@ export default function PlannerPage() {
             {(foodLoad || foodText) && <ABox text={foodText} loading={foodLoad} lt="Cerco ristoranti..." lang={lang} />}
             {!foodLoad && foodText && (
               <div className="p-brow">
-                <Btn label="✅ Ottimo, scegli formato →" onClick={() => setStep(14)} />
+                <Btn label={t('pl.s13.chooseFormat')} onClick={() => setStep(14)} />
               </div>
             )}
           </div>
@@ -1520,13 +1511,13 @@ export default function PlannerPage() {
         {/* ── Step 14: Formato ── */}
         {step === 14 && (
           <div className="p-card">
-            <div className="p-tt">📋 Formato itinerario?</div>
-            <div className="p-ht">Livello di dettaglio preferito</div>
+            <div className="p-tt">{t('pl.s14.title')}</div>
+            <div className="p-ht">{t('pl.s14.hint')}</div>
             <div className="p-fc">
               {FMTS.map(f => (
                 <div key={f.k} className={`p-fcard${fmt === f.k ? ' sel' : ''}`} onClick={() => { setFmt(f.k); genFinal(f.k); }}>
-                  <div style={{ fontSize:14, color:GL, fontWeight:500, marginBottom:4 }}>{f.l}</div>
-                  <div style={{ fontSize:11, color:'#666' }}>{f.d}</div>
+                  <div style={{ fontSize:14, color:GL, fontWeight:500, marginBottom:4 }}>{optLabel('fmt', f.k + '.l')}</div>
+                  <div style={{ fontSize:11, color:'#666' }}>{optLabel('fmt', f.k + '.d')}</div>
                 </div>
               ))}
             </div>
@@ -1554,7 +1545,7 @@ export default function PlannerPage() {
                       <button
                         onClick={saveItinerary}
                         style={{ background:G, color:DK, border:'none', borderRadius:10, padding:'10px 20px', fontSize:13, fontFamily:'Inter,sans-serif', cursor:'pointer', fontWeight:600 }}
-                      >💾 Salva itinerario</button>
+                      >{t('pl.save')}</button>
                       {saveStatus && <span style={{ fontSize:12, color: saveStatus.startsWith('✅') ? GL : '#f88' }}>{saveStatus}</span>}
                     </div>
                   )}
@@ -1564,15 +1555,15 @@ export default function PlannerPage() {
                     <button
                       onClick={downloadPDF}
                       style={{ background:'transparent', color:G, border:`.5px solid ${G}`, borderRadius:10, padding:'10px 20px', fontSize:13, fontFamily:'Inter,sans-serif', cursor:'pointer', fontWeight:600 }}
-                    >📄 Scarica PDF</button>
+                    >{t('pl.savePdf')}</button>
                   </div>
 
-                  <div className="p-stit">Galleria</div>
+                  <div className="p-stit">{t('pl.s15.gallery')}</div>
                   <div className="p-igrid">
                     {gal.map((s, gi) => <img key={gi} src={s} alt={dest} onError={e => { e.target.style.display = 'none'; }} />)}
                   </div>
 
-                  <div className="p-stit">Prenota e Esplora</div>
+                  <div className="p-stit">{t('pl.s15.bookExplore')}</div>
                   <div className="p-lgrid">
                     {lks.map(lc => (
                       <a key={lc.l} className="p-lcard" href={lc.h} target="_blank" rel="noopener noreferrer">
@@ -1585,12 +1576,12 @@ export default function PlannerPage() {
                   </div>
 
                   <div style={{ display:'flex', gap:12, flexWrap:'wrap', marginTop:'1.5rem', borderTop:`.5px solid ${BRD}`, paddingTop:'1.2rem', alignItems:'center' }}>
-                    <Btn ghost style={{ maxWidth:180 }} label="← Nuovo itinerario" onClick={resetAll} />
+                    <Btn ghost style={{ maxWidth:180 }} label={t('pl.s15.newItinerary')} onClick={resetAll} />
                     <button
                       style={{ background:'#1a1400', border:`.5px solid ${G}`, borderRadius:10, padding:'10px 18px', color:G, fontSize:13, fontFamily:'Inter,sans-serif', cursor:'pointer', fontWeight:500 }}
                       onClick={() => { try { window.scrollTo({ top:0, behavior:'smooth' }); } catch {} }}
                     >↑ Torna all'inizio</button>
-                    <p style={{ fontSize:11, color:'#555' }}>Suggerimenti orientativi. Verifica prima di prenotare.</p>
+                    <p style={{ fontSize:11, color:'#555' }}>{t('pl.s15.disclaimer')}</p>
                   </div>
                 </div>
               )}

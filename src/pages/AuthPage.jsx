@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useLang } from '../hooks/useLang'
 
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap');
@@ -79,6 +80,7 @@ export default function AuthPage() {
   const [success, setSuccess] = useState('')
 
   const { signIn, signUp, signInWithGoogle, user } = useAuth()
+  const { t, lang, setLang, languages } = useLang()
   const navigate = useNavigate()
 
   useEffect(() => { if (user) navigate('/dashboard') }, [user])
@@ -88,14 +90,14 @@ export default function AuthPage() {
     setError(''); setSuccess(''); setLoading(true)
 
     if (mode === 'signup') {
-      if (!fullName.trim()) { setError('Inserisci il tuo nome'); setLoading(false); return }
-      if (password.length < 6) { setError('La password deve essere di almeno 6 caratteri'); setLoading(false); return }
+      if (!fullName.trim()) { setError(t('auth.err.noName')); setLoading(false); return }
+      if (password.length < 6) { setError(t('auth.err.shortPassword')); setLoading(false); return }
       const { error } = await signUp(email, password, fullName)
       if (error) setError(error.message)
-      else setSuccess('Registrazione completata! Controlla la tua email per confermare l\'account.')
+      else setSuccess(t('auth.success.signup'))
     } else {
       const { error } = await signIn(email, password)
-      if (error) setError('Email o password non corretti')
+      if (error) setError(t('auth.err.badCredentials'))
       else navigate('/dashboard')
     }
     setLoading(false)
@@ -104,7 +106,7 @@ export default function AuthPage() {
   const handleGoogle = async () => {
     setError('')
     const { error } = await signInWithGoogle()
-    if (error) setError('Errore con Google: ' + error.message)
+    if (error) setError(t('auth.err.google') + error.message)
   }
 
   return (
@@ -118,12 +120,20 @@ export default function AuthPage() {
             <div className="auth-name">Travel <span>AI</span> Agent</div>
           </a>
 
+          {/* Selettore lingua */}
+          <div style={{ display:'flex', justifyContent:'center', marginBottom:'1.5rem' }}>
+            <select value={lang} onChange={e => setLang(e.target.value)} aria-label={t('auth.langLabel')}
+              style={{ background:'#0d0d0d', color:'#e8c97a', border:'.5px solid #2a2a2a', borderRadius:8, padding:'6px 12px', fontSize:13, fontFamily:'Inter,sans-serif', cursor:'pointer' }}>
+              {languages.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
+            </select>
+          </div>
+
           <div className="tabs">
             <button className={`tab ${mode==='signup'?'active':''}`} onClick={() => { setMode('signup'); setError(''); setSuccess(''); }}>
-              Registrati
+              {t('auth.tab.signup')}
             </button>
             <button className={`tab ${mode==='login'?'active':''}`} onClick={() => { setMode('login'); setError(''); setSuccess(''); }}>
-              Accedi
+              {t('auth.tab.login')}
             </button>
           </div>
 
@@ -133,30 +143,30 @@ export default function AuthPage() {
           <form onSubmit={handleSubmit}>
             {mode === 'signup' && (
               <div className="field">
-                <label>Nome completo</label>
-                <input type="text" placeholder="Mario Rossi" value={fullName}
+                <label>{t('auth.field.fullName')}</label>
+                <input type="text" placeholder={t('auth.placeholder.fullName')} value={fullName}
                   onChange={e => setFullName(e.target.value)} required />
               </div>
             )}
             <div className="field">
-              <label>Email</label>
-              <input type="email" placeholder="mario@email.com" value={email}
+              <label>{t('auth.field.email')}</label>
+              <input type="email" placeholder={t('auth.placeholder.email')} value={email}
                 onChange={e => setEmail(e.target.value)} required />
             </div>
             <div className="field">
-              <label>Password</label>
-              <input type="password" placeholder={mode==='signup'?'Minimo 6 caratteri':'La tua password'} value={password}
+              <label>{t('auth.field.password')}</label>
+              <input type="password" placeholder={mode==='signup'?t('auth.placeholder.passwordSignup'):t('auth.placeholder.passwordLogin')} value={password}
                 onChange={e => setPassword(e.target.value)} required />
             </div>
 
             <button className="btn-submit" type="submit" disabled={loading}>
-              {loading ? '⏳ Attendi...' : mode === 'signup' ? 'Crea il tuo account →' : 'Accedi →'}
+              {loading ? t('auth.btn.wait') : mode === 'signup' ? t('auth.btn.signup') : t('auth.btn.login')}
             </button>
           </form>
 
           <div className="divider">
             <div className="divider-line" />
-            <div className="divider-text">oppure</div>
+            <div className="divider-text">{t('auth.divider')}</div>
             <div className="divider-line" />
           </div>
 
@@ -167,17 +177,16 @@ export default function AuthPage() {
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
             </svg>
-            Continua con Google
+            {t('auth.btn.google')}
           </button>
 
           {mode === 'signup' && (
             <div className="terms">
-              Registrandoti accetti i Termini di servizio.<br />
-              I tuoi dati sono al sicuro e non vengono condivisi.
+              {t('auth.terms')}
             </div>
           )}
 
-          <div className="back-link" onClick={() => navigate('/')}>← Torna alla home</div>
+          <div className="back-link" onClick={() => navigate('/')}>{t('auth.backHome')}</div>
         </div>
       </div>
     </>

@@ -845,20 +845,47 @@ export default function PlannerPage() {
       `Periodo: ${period} ${tripYear || CY}. Viaggiatori: ${trav()}.\n` +
       `VINCOLO: tutti e 3 gli hotel devono appartenere alla fascia ${bdg}; il prezzo indicato deve essere coerente con quella fascia. Nomi propri reali, niente placeholder.\n` +
       `Per ognuno indica: prezzo a notte coerente con la fascia, zona, 3 pro. Il migliore qualita/prezzo ha best:true (uno solo).\n` +
-      `Rispondi SOLO con JSON array di 3 oggetti, senza testo prima o dopo:\n` +
+      `Rispondi ESCLUSIVAMENTE con un array JSON valido di 3 oggetti, senza alcun testo prima o dopo, senza blocchi di codice markdown. Usa solo virgolette doppie. I valori testuali (why, pros, zone) scrivili in ${langName()}.\n` +
       `[{"name":"Nome Hotel","stars":4,"zone":"quartiere","price":"euro150/notte","why":"perche sceglierlo","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/searchresults.html?ss=${encodeURIComponent(cityName)}"}]`;
     const txt = await callAI(msg, 900, null);
     if (!txt) return null;
-    try {
-      const m = txt.match(/\[[\s\S]*\]/);
-      if (m) {
-        const arr = JSON.parse(m[0]);
-        if (Array.isArray(arr) && arr.length > 0) {
-          if (!arr.some(h => h.best)) arr[0].best = true;
-          return arr;
+    const parsed = parseHotelJSON(txt);
+    if (parsed && parsed.length > 0) {
+      if (!parsed.some(h => h.best)) parsed[0].best = true;
+      return parsed;
+    }
+    return null;
+  }
+
+  // Estrazione robusta dell'array JSON dalla risposta AI (indipendente da lingua/formato).
+  // Prova piu strategie: blocco ```json, primo array bilanciato, parse diretto.
+  function parseHotelJSON(txt) {
+    if (!txt) return null;
+    // 1) Rimuovi eventuali fence ```json ... ```
+    let clean = txt.replace(/```json/gi, '').replace(/```/g, '').trim();
+    // 2) Prova parse diretto
+    try { const a = JSON.parse(clean); if (Array.isArray(a)) return a; } catch {}
+    // 3) Trova il PRIMO array bilanciato con scanner di parentesi (non greedy, robusto)
+    const start = clean.indexOf('[');
+    if (start >= 0) {
+      let depth = 0, inStr = false, esc = false;
+      for (let i = start; i < clean.length; i++) {
+        const c = clean[i];
+        if (esc) { esc = false; continue; }
+        if (c === '\\') { esc = true; continue; }
+        if (c === '"') inStr = !inStr;
+        if (inStr) continue;
+        if (c === '[') depth++;
+        else if (c === ']') {
+          depth--;
+          if (depth === 0) {
+            const candidate = clean.slice(start, i + 1);
+            try { const a = JSON.parse(candidate); if (Array.isArray(a)) return a; } catch {}
+            break;
+          }
         }
       }
-    } catch {}
+    }
     return null;
   }
 
@@ -916,7 +943,8 @@ export default function PlannerPage() {
       `Rispondi SOLO con JSON: [{"city":"Nome","days":2,"note":"perche"}]. Somma days = ${totalNights}.`;
     const txt = await callAI(msg, 800, null);
     let newBases = null;
-    try { const m = txt.match(/\[[\s\S]*\]/); if (m) { const arr = JSON.parse(m[0]); if (Array.isArray(arr) && arr.length) newBases = arr; } } catch {}
+    const parsedBases = parseHotelJSON(txt);
+    if (parsedBases && parsedBases.length) newBases = parsedBases;
     if (!newBases) { setHotelLoad(false); return; }
 
     const starsQ = budget === 'luxury' ? '&stars=5' : budget === 'economico' ? '&stars=2' : '&stars=4';

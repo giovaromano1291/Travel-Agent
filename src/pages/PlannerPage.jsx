@@ -11,7 +11,6 @@ const CY  = 2026;
 
 /* ─── Static data ───────────────────────────────────────────────────────── */
 const MONTHS  = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
-const SEASONS = ['Primavera','Estate','Autunno','Inverno'];
 const TTYPES  = ['Solo','Coppia','Famiglia','Gruppo di amici','Gruppo con bambini','Viaggio di nozze'];
 const DURS    = ['Weekend (2-3 giorni)','3-4 giorni','1 settimana','10 giorni','2 settimane','3+ settimane'];
 const STYLES  = ['Cultura & Storia','Relax & Natura','Avventura & Sport','Gastronomia','Benessere & Spa','Enogastronomia','Mix equilibrato'];
@@ -1132,7 +1131,6 @@ export default function PlannerPage() {
             </div>
             <div style={{ fontSize:12, color:'#666', margin:'1rem 0 .8rem', borderTop:`.5px solid ${BRD}`, paddingTop:'1rem' }}>Oppure scegli un periodo generico</div>
             <div className="p-chips">{MONTHS.map(mo => <Chip key={mo} label={mo} onClick={() => { setPeriod(mo); setTripYear(detectYear(mo)); setStep(3); }} />)}</div>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:10, marginTop:10 }}>{SEASONS.map(s => <Chip key={s} label={s} onClick={() => { setPeriod(s); setStep(3); }} />)}</div>
           </div>
         )}
 

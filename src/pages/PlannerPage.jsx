@@ -774,7 +774,7 @@ export default function PlannerPage() {
     const y = detectYear(period); setTripYear(y);
     const msg =
       `Crea un piano visivo dell'itinerario per: ${dest}, ${period} ${y}, ${duration}${duration.includes('Weekend') ? ' (solo 2-3 giorni, max 2 destinazioni vicine)' : ''}, ${style}, ${trav()}, budget ${budget}.\n\n` +
-      `REGOLA CRITICA SUL TIPO:\n- Usa [QUARTIERE] se ${dest} e una SINGOLA CITTA\n- Usa [CITTA] SOLO se l'itinerario tocca piu CITTA DIVERSE\n- Quartieri, arrondissement, zone di una stessa citta = SEMPRE [QUARTIERE]\n\n` +
+      `REGOLA CRITICA SUL TIPO:\n- Usa [QUARTIERE] se ${dest} e una SINGOLA CITTA\n- Usa [CITTA] SOLO se l'itinerario tocca piu CITTA DIVERSE\n- Quartieri, arrondissement, zone di una stessa citta = SEMPRE [QUARTIERE]\n- IMPORTANTE: i marcatori [QUARTIERE] e [CITTA] sono etichette tecniche: scrivili SEMPRE ESATTAMENTE cosi in italiano tra parentesi quadre, anche se il resto e in un'altra lingua. NON tradurli mai (non usare [DISTRICT], [CITY], ecc.).\n\n` +
       `FORMATO OBBLIGATORIO per ogni blocco:\n### NOME (N giorni) [TIPO]\n- **Cosa vedere**: luogo - perche\n- **Cosa fare**: attivita - descrizione\n- **Da non perdere**: esperienza - perche\n\n` +
       `REGOLE:\n1. Solo ### per i titoli\n2. Niente tabelle\n3. Inizia subito col primo ###\n4. La somma dei giorni deve corrispondere a: ${duration}\n5. Scrivi in ${langName()}\n6. OGNI citta/tappa deve avere il PROPRIO titolo ### su una riga separata; non unire mai due localita nello stesso blocco e non attaccare un nuovo titolo alla fine di un bullet\n7. Dopo ogni blocco lascia una riga vuota prima del ### successivo\n\n` +
       `ESEMPIO singola citta (Parigi, 5gg):\n### LOUVRE & MARAIS (2 giorni) [QUARTIERE]\n- **Cosa vedere**: Museo del Louvre\n### MONTMARTRE (1 giorno) [QUARTIERE]\n### EIFFEL & SAINT-GERMAIN (2 giorni) [QUARTIERE]\n\n` +
@@ -806,8 +806,8 @@ export default function PlannerPage() {
       if (t.startsWith('###')) {
         if (cur) out.push(cur);
         const body = t.replace(/^#+\s*/, '');
-        const typeMatch = body.match(/\[(QUARTIERE|CITTA|CITTÀ)\]/i);
-        const type = typeMatch ? (typeMatch[1].toUpperCase().includes('QUART') ? 'quartiere' : 'citta') : null;
+        const typeMatch = body.match(/\[(QUARTIERE|CITTA|CITTÀ|DISTRICT|NEIGHBORHOOD|CITY)\]/i);
+        const type = typeMatch ? (/QUART|DISTRICT|NEIGHBOR/i.test(typeMatch[1]) ? 'quartiere' : 'citta') : null;
         const nm = body.replace(/\[.*?\]/g, '').replace(/\(.*\)/, '').trim();
         const dg = body.match(/\((\d+)/);
         cur = { name: nm, days: dg ? parseInt(dg[1]) : null, type };
@@ -1389,7 +1389,7 @@ export default function PlannerPage() {
 
                 {selNames.length > 0 && (
                   <div style={{ background:'#111', border:`.5px solid ${G}`, borderRadius:10, padding:'12px 14px', marginBottom:'1rem', fontSize:12, color:'#ccc' }}>
-                    <div style={{ color:G, fontSize:11, letterSpacing:'1px', textTransform:'uppercase', marginBottom:6 }}>✅ Selezione</div>
+                    <div style={{ color:G, fontSize:11, letterSpacing:'1px', textTransform:'uppercase', marginBottom:6 }}>{t('pl.s10.selection')}</div>
                     {selNames.map((n, ni) => <div key={ni}>• {n}</div>)}
                   </div>
                 )}

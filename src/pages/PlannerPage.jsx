@@ -137,6 +137,7 @@ function mdHtml(t, lang = 'it') {
       return `<div style='color:${GL};font-weight:700;margin-top:1.8rem;font-size:15px;border-top:0.5px solid #2a2a2a;padding-top:1.2rem;display:block'>${clean}</div>`;
     })
     .replace(/\*\*(.*?)\*\*/g, `<strong style='color:${GL};font-weight:500'>$1</strong>`)
+    .replace(/\*\*/g, '')
     .replace(/\*([^*\n]+?)\*/g, `<em style='color:#bbb;font-style:italic'>$1</em>`)
     .replace(/^([A-Z][A-ZÀÈÉÌÒÙ\s&'"-]+:[^\n]+\[(?:QUARTIERE|CIT))/gm, '### $1')
     .replace(/^### (.+)$/gm, `<div style='display:flex;align-items:center;gap:10px;margin:1.6rem 0 0.8rem;padding:10px 14px;background:linear-gradient(90deg,#1a1400,transparent);border-left:3px solid ${G};border-radius:0 8px 8px 0'><span style='font-family:Cormorant Garamond,serif;font-size:16px;font-weight:600;color:${GL}'>$1</span></div>`)
@@ -623,6 +624,28 @@ export default function PlannerPage() {
     return `${b}${k} - ${travType}`;
   }
 
+  // Se la tipologia e "Viaggio di nozze", restituisce istruzioni dedicate da iniettare nei prompt,
+  // cosi l'itinerario considera l'occasione speciale (esperienze romantiche ad hoc).
+  // Per tutte le altre tipologie restituisce stringa vuota (nessun impatto).
+  function honeymoonHint(context) {
+    if (travType !== 'Viaggio di nozze') return '';
+    const base =
+      `\n\nNOTA SPECIALE - VIAGGIO DI NOZZE (LUNA DI MIELE): questa e la luna di miele di una coppia, un'occasione speciale e romantica. ` +
+      `Personalizza l'esperienza di conseguenza, integrando (senza esagerare e mantenendo l'equilibrio con le visite normali richieste dallo stile "${style}"):\n`;
+    if (context === 'food') {
+      return base +
+        `- almeno una cena romantica speciale (ristorante panoramico, vista mare/citta, atmosfera intima, magari a lume di candela)\n` +
+        `- un'esperienza enogastronomica di coppia (degustazione, cena degustazione, brindisi speciale)\n` +
+        `- segnala dove chiedere allestimenti speciali per l'occasione se disponibili.`;
+    }
+    return base +
+      `- esperienze romantiche ad hoc: tramonti panoramici, passeggiate suggestive, momenti intimi\n` +
+      `- almeno un'esperienza speciale memorabile (es. cena privata, spa di coppia, gita in barca al tramonto, mongolfiera, terme, o esperienza iconica romantica adatta alla destinazione)\n` +
+      `- alloggi e ambienti con atmosfera romantica quando pertinente\n` +
+      `- evita attivita troppo affollate o poco intime quando esiste un'alternativa piu suggestiva\n` +
+      `- inserisci piccoli tocchi speciali pensati per festeggiare l'occasione.`;
+  }
+
   function goBack() {
     if (step <= 1) return;
     const target = step - 1;
@@ -780,21 +803,27 @@ export default function PlannerPage() {
       `ESEMPIO singola citta (Parigi, 5gg):\n### LOUVRE & MARAIS (2 giorni) [QUARTIERE]\n- **Cosa vedere**: Museo del Louvre\n### MONTMARTRE (1 giorno) [QUARTIERE]\n### EIFFEL & SAINT-GERMAIN (2 giorni) [QUARTIERE]\n\n` +
       `ESEMPIO piu citta (Costa Azzurra, 7gg):\n### NIZZA (3 giorni) [CITTA]\n### MONACO (2 giorni) [CITTA]\n### CANNES (2 giorni) [CITTA]` +
       dropRouteHint(dep, dest, transport, 'brief');
-    await callAI(msg, 1800, t => setPlanText(t));
+    const msgP = msg + honeymoonHint('plan');
+    await callAI(msgP, 1800, t => setPlanText(t));
     setPlanLoad(false);
   }
 
   async function genRevised() {
-    setStep(9); setRevLoad(true); setRevText(''); setMods('');
+    setStep(9); setRevLoad(true);
     const y = tripYear || detectYear(period);
+    // Base = ULTIMO piano disponibile (revText se gia rielaborato, altrimenti planText originale).
+    // Cosi ogni nuova modifica si accumula su quelle precedenti invece di ripartire dall'originale.
+    const basePlan = revText || planText;
     const msg =
       `IMPORTANTE: scrivi TUTTO in ${langName()}.\n\n` +
-      `Piano originale per ${dest} (${period} ${y}):\n${planText}\n\n` +
-      `L'utente ha richiesto una o PIU modifiche nel testo seguente. Identifica OGNI singola richiesta (aggiunte, rimozioni, escursioni in giornata, cambi di tappa) e applicale TUTTE, senza tralasciarne nessuna:\n"${mods}"\n\n` +
+      `Piano attuale per ${dest} (${period} ${y}):\n${basePlan}\n\n` +
+      `L'utente ha richiesto una o PIU modifiche nel testo seguente. Questo piano potrebbe GIA contenere modifiche precedenti: MANTIENILE tutte e applica in aggiunta le nuove richieste. Identifica OGNI singola richiesta (aggiunte, rimozioni, escursioni in giornata, cambi di tappa) e applicale TUTTE, senza tralasciarne nessuna e senza reintrodurre localita precedentemente rimosse:\n"${mods}"\n\n` +
       `Rielabora con STESSO FORMATO: ### NOME (N giorni) [TIPO]\n- **Cosa vedere/fare/da non perdere**\n` +
-      `REGOLE: solo ###, niente tabelle, somma giorni = ${duration}. OGNI citta ha il proprio titolo ### su riga separata, non unire mai due localita nello stesso blocco. Le escursioni in giornata vanno indicate nella tappa/base da cui partono. Applica TUTTE le modifiche richieste. Scrivi in ${langName()}.` +
+      `REGOLE: solo ###, niente tabelle, somma giorni = ${duration}. OGNI citta ha il proprio titolo ### su riga separata, non unire mai due localita nello stesso blocco. Le escursioni in giornata vanno indicate nella tappa/base da cui partono. Applica TUTTE le modifiche richieste mantenendo quelle gia presenti nel piano attuale. Scrivi in ${langName()}.` +
       dropRouteHint(departure, dest, transport, 'brief');
-    await callAI(msg, 2000, t => setRevText(t));
+    setRevText(''); setMods('');
+    const msgR = msg + honeymoonHint('plan');
+    await callAI(msgR, 2000, t => setRevText(t));
     setRevLoad(false);
   }
 
@@ -911,11 +940,22 @@ export default function PlannerPage() {
     const results = await Promise.all(clusters.map(async (cl) => {
       const searchCity = cl.isSingleCity ? dest : cl.name;
       try {
+        // Primo tentativo
         let hotels = await fetchHotelsForCity(searchCity, budget);
+        // Retry automatico se il primo tentativo non produce hotel validi
+        // (copre timeout sporadici o risposte AI non parsabili per una singola citta)
+        if (!hotels || !Array.isArray(hotels) || hotels.length === 0) {
+          hotels = await fetchHotelsForCity(searchCity, budget);
+        }
         if (!hotels || !Array.isArray(hotels) || hotels.length === 0) hotels = makeFallback(searchCity);
         return { cl, hotels };
       } catch (err) {
         console.error('Errore hotel per', cl.name, err);
+        // Un ultimo tentativo anche in caso di eccezione
+        try {
+          const retry = await fetchHotelsForCity(searchCity, budget);
+          if (retry && Array.isArray(retry) && retry.length > 0) return { cl, hotels: retry };
+        } catch {}
         return { cl, hotels: makeFallback(searchCity) };
       }
     }));
@@ -967,17 +1007,18 @@ export default function PlannerPage() {
   async function genDraft(hotel) {
     setStep(11); setDraftLoad(true); setDraftText('');
     const y = tripYear || detectYear(period);
-    const activeText = (revText || planText).slice(0, 1500);
+    const activeText = revText || planText;
     const msg =
       `IMPORTANTE: scrivi TUTTO in ${langName()}.\n\n` +
       `Itinerario bozza per ${dest}, ${period} ${y}, ${duration}, ${style}, budget ${budget}, alloggio ${hotel}, ${trav()}.\n` +
-      `Piano visite:\n${activeText}\n\n` +
+      `Piano visite (includi OGNI citta, tappa ed escursione in giornata qui elencata, senza ometterne nessuna):\n${activeText}\n\n` +
       `FORMATO OBBLIGATORIO:\n\n**Giorno 1 - Titolo**\n\nMATTINA\n- Attivita 1 (tempo)\n- Attivita 2 (tempo)\n\nPOMERIGGIO\n- Attivita 1\n\nSERA\n- Attivita 1\n\n---\n\n` +
       `REGOLE: MATTINA/POMERIGGIO/SERA su riga isolata maiuscolo. Ogni attivita inizia con - su riga separata. Riga vuota tra sezioni.\n\n` +
       `## LOGISTICA GENERALE\nOGNI punto su riga separata con -:\n- Trasporti: ...\n- Pagamenti: ...\n- App utili: ...\n- Prenotazioni: ...\n- Budget: ...\n` +
       `Scrivi in ${langName()}.` +
       dropRouteHint(departure, dest, transport, 'detailed');
-    await callAI(msg, 8000, t => setDraftText(t));
+    const msgD = msg + honeymoonHint('plan');
+    await callAI(msgD, 12000, t => setDraftText(t));
     setDraftLoad(false);
   }
 
@@ -994,7 +1035,8 @@ export default function PlannerPage() {
       `FORMATO OBBLIGATORIO E TASSATIVO: struttura l'output per giorni distinti. Per OGNI giorno da 1 a ${nGiorni} scrivi PRIMA un'intestazione isolata "**Giorno N**" (esatto: "**Giorno 1**", poi piu sotto "**Giorno 2**", ecc.), e SOLO SOTTO quell'intestazione metti il PRANZO e la CENA di quel giorno. Ogni giorno ha ESATTAMENTE un pranzo e una cena. Prima di passare al giorno successivo, chiudi il precedente. NON elencare piu ristoranti consecutivi senza la loro intestazione di giorno. Devi produrre esattamente ${nGiorni} intestazioni "**Giorno N**", una per giorno, in ordine.\n` +
       `## ESPERIENZE CULINARIE DA NON PERDERE\n3-4 esperienze, OGNUNA su una riga separata che inizia con "- " (elenco puntato), nel formato "- **Nome esperienza**: breve descrizione. LINK url". Non scrivere le esperienze di seguito nello stesso paragrafo.\n` +
       `Ricorda: TUTTO in ${langName()}.`;
-    await callAI(msg, 3000, t => setFoodText(t));
+    const msgF = msg + honeymoonHint('food');
+    await callAI(msgF, 3000, t => setFoodText(t));
     setFoodLoad(false);
   }
 
@@ -1031,12 +1073,13 @@ export default function PlannerPage() {
       transportBlock +
       `## ALLOGGIO\n${selStr}: zona e perche ottimale\nLINK ${hotelSearch}\n` +
       `IMPORTANTE sui link alloggio: usa SOLO link di ricerca Booking nel formato https://www.booking.com/searchresults.html?ss=NOME_CITTA. Non inventare mai URL di siti ufficiali di hotel ne link diretti a strutture, perche risultano inesistenti.\n` +
-      `## ITINERARIO GIORNO PER GIORNO\nSEGUI ESATTAMENTE questa bozza approvata aggiungendo solo dettagli e link:\n${draftText.slice(0, 2500)}\n\nPer ogni attivita aggiungi: LINK url-biglietti${wantsFood ? ' e LINK url-ristorante' : ''}\n` +
+      `## ITINERARIO GIORNO PER GIORNO\nSEGUI ESATTAMENTE questa bozza approvata aggiungendo solo dettagli e link. NON omettere nessuna tappa, nessuna citta e nessuna escursione in giornata presente nella bozza:\n${draftText}\n\nPer ogni attivita aggiungi: LINK url-biglietti${wantsFood ? ' e LINK url-ristorante' : ''}\n` +
       gdStr +
       `## ESPERIENZE LOCALI E CUCINA\n3-4 con LINK url\n` +
       `## CONSIGLI PRATICI\n- Trasporti\n- Pagamenti\n- App utili\n- Visto\n- Valigia` +
       dropRouteHint(departure, dest, transport, 'detailed');
-    try { await callAI(msg, 8000, t => setFinText(t)); }
+    const msgFin = msg + honeymoonHint('final');
+    try { await callAI(msgFin, 12000, t => setFinText(t)); }
     catch (e) { setFinText(`Errore: ${e.message}`); }
     setFinLoad(false);
   }

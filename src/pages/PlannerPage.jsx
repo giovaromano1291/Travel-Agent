@@ -292,13 +292,13 @@ function haversine([lat1,lon1],[lat2,lon2]) {
 /* ─── Ottimizzazione geografica "a goccia" (viaggio in auto) ───────────── */
 function isCarTransport(transport) {
   const t = (transport || '').toLowerCase();
-  return t.includes('auto') || t.includes('noleggio') || t.includes('moto') || t.includes('camper');
+  return t.includes('auto') || t.includes('moto') || t.includes('camper');
 }
 
 /* Testo da iniettare nei prompt AI quando il viaggio è in auto:
    percorso ottimizzato "a goccia" — prima le mete più lontane dalla partenza,
    poi progressivamente quelle sulla via del ritorno. */
-function dropRouteHint(departure, dest, transport, mode) {
+function dropRouteHint(departure, dest, transport, mode, rentAtDest) {
   if (!isCarTransport(transport)) return '';
   const t = (transport || '').toLowerCase();
   const detailed = mode === 'detailed';
@@ -310,6 +310,18 @@ function dropRouteHint(departure, dest, transport, mode) {
     stile = `Chi viaggia in CAMPER si sposta lentamente e sosta spesso: privilegia tappe con aree sosta/campeggi vicini, natura e borghi accessibili (evita centri storici difficili in camper).`;
   } else {
     stile = `Chi viaggia in ${transport} può fermarsi lungo il tragitto per scoprire luoghi meno turistici.`;
+  }
+  // CASO NOLEGGIO A DESTINAZIONE: l'andata NON e su strada (si arriva con altro mezzo, es. aereo/treno).
+  // Il mezzo su gomma serve solo per spostarsi SUL POSTO, quindi niente tappe stradali dalla citta di partenza.
+  if (rentAtDest === true) {
+    return (
+      `\n\nMEZZO A NOLEGGIO A DESTINAZIONE (${transport}): l'utente NON parte da ${departure} con il mezzo. ` +
+      `Raggiunge ${dest} con un altro mezzo (es. aereo o treno) e noleggia ${transport} SUL POSTO per spostarsi tra le tappe.\n` +
+      `NON includere un viaggio su strada di andata da ${departure} ne tappe intermedie tra ${departure} e ${dest}. ` +
+      `${stile}\n` +
+      `Usa il mezzo solo per gli spostamenti tra le localita della destinazione, ottimizzando i tragitti in loco. ` +
+      `Nella sezione volo/trasporto, considera l'arrivo a ${dest} con aereo/treno e il ritiro del mezzo a noleggio all'arrivo.`
+    );
   }
   const tappe = detailed
     // Itinerario finale: dettaglia cosa fare/vedere nelle tappe intermedie
@@ -554,6 +566,7 @@ export default function PlannerPage() {
 
   /* ── transport ── */
   const [transport, setTransport]   = useState(null);
+  const [rentAtDest, setRentAtDest] = useState(null);
   const [distClose, setDistClose]   = useState(null);
 
   /* ── AI text ── */
@@ -802,7 +815,7 @@ export default function PlannerPage() {
       `REGOLE:\n1. Solo ### per i titoli\n2. Niente tabelle\n3. Inizia subito col primo ###\n4. La somma dei giorni deve corrispondere a: ${duration}\n5. Scrivi in ${langName()}\n6. OGNI citta/tappa deve avere il PROPRIO titolo ### su una riga separata; non unire mai due localita nello stesso blocco e non attaccare un nuovo titolo alla fine di un bullet\n7. Dopo ogni blocco lascia una riga vuota prima del ### successivo\n\n` +
       `ESEMPIO singola citta (Parigi, 5gg):\n### LOUVRE & MARAIS (2 giorni) [QUARTIERE]\n- **Cosa vedere**: Museo del Louvre\n### MONTMARTRE (1 giorno) [QUARTIERE]\n### EIFFEL & SAINT-GERMAIN (2 giorni) [QUARTIERE]\n\n` +
       `ESEMPIO piu citta (Costa Azzurra, 7gg):\n### NIZZA (3 giorni) [CITTA]\n### MONACO (2 giorni) [CITTA]\n### CANNES (2 giorni) [CITTA]` +
-      dropRouteHint(dep, dest, transport, 'brief');
+      dropRouteHint(dep, dest, transport, 'brief', rentAtDest);
     const msgP = msg + honeymoonHint('plan');
     await callAI(msgP, 1800, t => setPlanText(t));
     setPlanLoad(false);
@@ -820,7 +833,7 @@ export default function PlannerPage() {
       `L'utente ha richiesto una o PIU modifiche nel testo seguente. Questo piano potrebbe GIA contenere modifiche precedenti: MANTIENILE tutte e applica in aggiunta le nuove richieste. Identifica OGNI singola richiesta (aggiunte, rimozioni, escursioni in giornata, cambi di tappa) e applicale TUTTE, senza tralasciarne nessuna e senza reintrodurre localita precedentemente rimosse:\n"${mods}"\n\n` +
       `Rielabora con STESSO FORMATO: ### NOME (N giorni) [TIPO]\n- **Cosa vedere/fare/da non perdere**\n` +
       `REGOLE: solo ###, niente tabelle, somma giorni = ${duration}. OGNI citta ha il proprio titolo ### su riga separata, non unire mai due localita nello stesso blocco. Le escursioni in giornata vanno indicate nella tappa/base da cui partono. Applica TUTTE le modifiche richieste mantenendo quelle gia presenti nel piano attuale. Scrivi in ${langName()}.` +
-      dropRouteHint(departure, dest, transport, 'brief');
+      dropRouteHint(departure, dest, transport, 'brief', rentAtDest);
     setRevText(''); setMods('');
     const msgR = msg + honeymoonHint('plan');
     await callAI(msgR, 2000, t => setRevText(t));
@@ -1016,7 +1029,7 @@ export default function PlannerPage() {
       `REGOLE: MATTINA/POMERIGGIO/SERA su riga isolata maiuscolo. Ogni attivita inizia con - su riga separata. Riga vuota tra sezioni.\n\n` +
       `## LOGISTICA GENERALE\nOGNI punto su riga separata con -:\n- Trasporti: ...\n- Pagamenti: ...\n- App utili: ...\n- Prenotazioni: ...\n- Budget: ...\n` +
       `Scrivi in ${langName()}.` +
-      dropRouteHint(departure, dest, transport, 'detailed');
+      dropRouteHint(departure, dest, transport, 'detailed', rentAtDest);
     const msgD = msg + honeymoonHint('plan');
     await callAI(msgD, 12000, t => setDraftText(t));
     setDraftLoad(false);
@@ -1077,7 +1090,7 @@ export default function PlannerPage() {
       gdStr +
       `## ESPERIENZE LOCALI E CUCINA\n3-4 con LINK url\n` +
       `## CONSIGLI PRATICI\n- Trasporti\n- Pagamenti\n- App utili\n- Visto\n- Valigia` +
-      dropRouteHint(departure, dest, transport, 'detailed');
+      dropRouteHint(departure, dest, transport, 'detailed', rentAtDest);
     const msgFin = msg + honeymoonHint('final');
     try { await callAI(msgFin, 12000, t => setFinText(t)); }
     catch (e) { setFinText(`Errore: ${e.message}`); }
@@ -1091,7 +1104,7 @@ export default function PlannerPage() {
     setAiPer(''); setPlanText(''); setRevText(''); setDraftText(''); setFoodText(''); setFinText('');
     setHotelBases([]); setSelKeys([]); setSelNames([]); setSelStr(''); setExclHotels([]);
     setHotelNotes(''); setShowHotelNotes(false); setGuide(null); setShowCust(false); setCustH('');
-    setTransport(null); setDistClose(null); setSaveStatus('');
+    setTransport(null); setRentAtDest(null); setDistClose(null); setSaveStatus('');
   }
 
   /* ── draft summary for step 12 ── */
@@ -1340,24 +1353,38 @@ export default function PlannerPage() {
                 <div style={{ fontSize:13, color:GL, fontWeight:600, marginBottom:8 }}>{t('pl.s7.transport')}</div>
                 <div style={{ fontSize:12, color:'#888', marginBottom:12 }}>Il mezzo scelto {t('pl.s7.transportHint')}</div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-                  {['Auto propria','Auto a noleggio','Moto','Camper','Treno','Bus','Aereo'].map(opt => (
-                    <div key={opt} className={'p-chip' + (transport === opt ? ' sel' : '')} onClick={() => setTransport(opt)}>{optLabel('transport', opt)}</div>
+                  {['Auto','Moto','Camper','Treno','Bus','Aereo'].map(opt => (
+                    <div key={opt} className={'p-chip' + (transport === opt ? ' sel' : '')} onClick={() => { setTransport(opt); setRentAtDest(null); }}>{optLabel('transport', opt)}</div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Genera il piano: attivo solo con partenza + mezzo scelti */}
+            {/* Domanda parto/noleggio: solo per mezzi guidabili (Auto, Moto, Camper) */}
+            {departure && isCarTransport(transport) && (
+              <div style={{ background:'#111', border:`.5px solid ${rentAtDest !== null ? G : '#333'}`, borderRadius:12, padding:'1.2rem 1.4rem', marginTop:'1rem' }}>
+                <div style={{ fontSize:13, color:GL, fontWeight:600, marginBottom:10 }}>{t('pl.s7.rentQuestion').replace('{mezzo}', optLabel('transport', transport))}</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                  <div className={'p-chip' + (rentAtDest === false ? ' sel' : '')} onClick={() => setRentAtDest(false)}>{t('pl.s7.departWith').replace('{dep}', departure)}</div>
+                  <div className={'p-chip' + (rentAtDest === true ? ' sel' : '')} onClick={() => setRentAtDest(true)}>{t('pl.s7.rentAtDest')}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Genera il piano: attivo con partenza + mezzo + (se guidabile) scelta noleggio */}
             {departure && (
               <>
                 {!transport && (
                   <div style={{ fontSize:12, color:'#e8a24c', margin:'.8rem 0 0' }}>{t('pl.s7.selectTransport')}</div>
                 )}
+                {transport && isCarTransport(transport) && rentAtDest === null && (
+                  <div style={{ fontSize:12, color:'#e8a24c', margin:'.8rem 0 0' }}>{t('pl.s7.rentChoiceNeeded')}</div>
+                )}
                 <Btn
                   label={t('pl.s7.genPlan')}
-                  disabled={!transport}
+                  disabled={!transport || (isCarTransport(transport) && rentAtDest === null)}
                   style={{ marginTop:12 }}
-                  onClick={() => { if (transport) genPlan(departure); }}
+                  onClick={() => { if (transport && !(isCarTransport(transport) && rentAtDest === null)) genPlan(departure); }}
                 />
               </>
             )}
@@ -1376,7 +1403,7 @@ export default function PlannerPage() {
                 {/* Promemoria del mezzo gia scelto allo step 7 */}
                 {transport && (
                   <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#1a1400', border:`.5px solid ${G}`, borderRadius:20, padding:'4px 12px', fontSize:12, color:GL, margin:'1rem 0 0' }}>
-                    {t('pl.s8.travelBy').replace('{transport}', optLabel('transport', transport))}
+                    {(rentAtDest === true ? t('pl.s8.travelByRent') : t('pl.s8.travelBy')).replace('{transport}', optLabel('transport', transport))}
                   </div>
                 )}
                 <div style={{ fontSize:13, color:'#888', margin:'1rem 0 .5rem' }}>{t('pl.s8.modifyQ')}</div>

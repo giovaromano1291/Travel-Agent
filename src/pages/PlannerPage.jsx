@@ -495,21 +495,24 @@ function Badge({ text }) {
 }
 
 /* ─── HCard — top-level component (must be outside PlannerPage) ─────────── */
-function HCard({ h, bi, city: cityName, budget, dates, selKeys, setSelKeys, selNames, setSelNames, t }) {
+function HCard({ h, bi, city: cityName, budget, dates, selKeys, setSelKeys, selNames, setSelNames, t, isCamper }) {
   const nm = h.name || 'Hotel';
-  const st = h.stars || 3;
+  const st = isCamper ? 0 : (h.stars || 3);
   const zn = h.zone || h.zona || 'centro';
   const pr = h.price || h.prezzo || '';
   const wh = h.why || h.perche || '';
   const ps = h.pros || [];
   const bs = h.best || false;
-  // Link Booking specifico per QUESTO hotel: costruito dal nome della struttura,
-  // non da h.url (che l'AI genera spesso identico per tutte le alternative).
-  const isFallbackName = /^cerca hotel/i.test(nm);
+  // Link specifico per QUESTA struttura: costruito dal nome, non da h.url
+  // (che l'AI genera spesso identico per tutte le alternative).
+  const isFallbackName = /^cerca hotel|^cerca aree/i.test(nm);
   const query = isFallbackName
     ? cityName
     : (nm.toLowerCase().includes((cityName || '').toLowerCase()) ? nm : `${nm} ${cityName}`);
-  const ur = `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(query)}${dates || ''}`;
+  // Camper: link a Google Maps (aree sosta); altrimenti Booking.
+  const ur = isCamper
+    ? `https://www.google.com/maps/search/${encodeURIComponent(isFallbackName ? 'area sosta camper ' + cityName : query)}`
+    : `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(query)}${dates || ''}`;
   const sk = `${bi}-${nm}`;
   const isSel = selKeys.includes(sk);
   function select() {
@@ -521,10 +524,10 @@ function HCard({ h, bi, city: cityName, budget, dates, selKeys, setSelKeys, selN
   }
   return (
     <div className={`p-hcard${isSel ? ' sel' : ''}`} onClick={select}>
-      {bs && <div style={{ display:'inline-block', background:'#1a1400', border:`.5px solid ${G}`, borderRadius:10, padding:'2px 10px', fontSize:10, color:G, marginBottom:6 }}>{t('pl.s10.bestValue')}</div>}
-      <div style={{ fontSize:15, color:GL, fontWeight:500, marginBottom:4 }}>{nm} {starsStr(st)}</div>
+      {bs && <div style={{ display:'inline-block', background:'#1a1400', border:`.5px solid ${G}`, borderRadius:10, padding:'2px 10px', fontSize:10, color:G, marginBottom:6 }}>{isCamper ? t('pl.s10.bestValue.camper') : t('pl.s10.bestValue')}</div>}
+      <div style={{ fontSize:15, color:GL, fontWeight:500, marginBottom:4 }}>{nm}{!isCamper && st ? ' ' + starsStr(st) : ''}</div>
       <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:6 }}>
-        {[zn, pr, budget].filter(Boolean).map(tag => (
+        {(isCamper ? [zn, pr] : [zn, pr, budget]).filter(Boolean).map(tag => (
           <span key={tag} style={{ background:'#1a1a1a', border:'.5px solid #333', borderRadius:12, padding:'3px 10px', fontSize:11, color:'#aaa' }}>{tag}</span>
         ))}
       </div>
@@ -534,7 +537,7 @@ function HCard({ h, bi, city: cityName, budget, dates, selKeys, setSelKeys, selN
           {ps.map((pf, pi) => <span key={pi} style={{ background:'#1a1a1a', border:'.5px solid #333', borderRadius:10, padding:'3px 9px', fontSize:11, color:'#bbb' }}>✓ {pf}</span>)}
         </div>
       )}
-      <a href={ur} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'#6ab0ff', textDecoration:'none' }} onClick={e => e.stopPropagation()}>{t('pl.s10.bookOn')}</a>
+      <a href={ur} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'#6ab0ff', textDecoration:'none' }} onClick={e => e.stopPropagation()}>{isCamper ? t('pl.s10.bookOn.camper') : t('pl.s10.bookOn')}</a>
     </div>
   );
 }
@@ -877,18 +880,31 @@ export default function PlannerPage() {
   }
 
   async function fetchHotelsForCity(cityName, bdg) {
-    const hint = bdg === 'luxury'
-      ? '5 stelle lusso: Four Seasons, Rocco Forte, Belmond. Fascia 400+ eur/notte.'
-      : bdg === 'economico'
-      ? '2-3 stelle o B&B boutique. Fascia 60-120 eur/notte.'
-      : '3-4 stelle: NH Hotels, Starhotels, Marriott Courtyard. Fascia 120-250 eur/notte.';
-    const msg =
-      `Proponi ESATTAMENTE 3 hotel REALI ed esistenti a ${cityName}, TUTTI E 3 della fascia ${bdg} (${hint}).\n` +
-      `Periodo: ${period} ${tripYear || CY}. Viaggiatori: ${trav()}.\n` +
-      `VINCOLO: tutti e 3 gli hotel devono appartenere alla fascia ${bdg}; il prezzo indicato deve essere coerente con quella fascia. Nomi propri reali, niente placeholder.\n` +
-      `Per ognuno indica: prezzo a notte coerente con la fascia, zona, 3 pro. Il migliore qualita/prezzo ha best:true (uno solo).\n` +
-      `Rispondi ESCLUSIVAMENTE con un array JSON valido di 3 oggetti, senza alcun testo prima o dopo, senza blocchi di codice markdown. Usa solo virgolette doppie. I valori testuali (why, pros, zone) scrivili in ${langName()}.\n` +
-      `[{"name":"Nome Hotel","stars":4,"zone":"quartiere","price":"euro150/notte","why":"perche sceglierlo","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/searchresults.html?ss=${encodeURIComponent(cityName)}"}]`;
+    const isCamper = (transport || '').toLowerCase().includes('camper');
+    let msg;
+    if (isCamper) {
+      // Camper: proponi aree sosta / aree attrezzate / campeggi (budget ignorato)
+      msg =
+        `Proponi ESATTAMENTE 3 sistemazioni REALI ed esistenti per CAMPER a ${cityName} o nelle immediate vicinanze, con un MIX di tipologie: area sosta camper, area attrezzata (camper service con carico/scarico ed elettricita) e campeggio.\n` +
+        `Periodo: ${period} ${tripYear || CY}. Viaggiatori: ${trav()}.\n` +
+        `Per ognuna indica: nome reale, tipo (area sosta / area attrezzata / campeggio), distanza/posizione rispetto a ${cityName}, servizi principali (es. carico-scarico acqua, elettricita, wc, docce), prezzo indicativo a notte. Nomi propri reali, niente placeholder.\n` +
+        `La migliore per rapporto posizione/servizi ha best:true (una sola).\n` +
+        `Rispondi ESCLUSIVAMENTE con un array JSON valido di 3 oggetti, senza alcun testo prima o dopo, senza blocchi di codice markdown. Usa solo virgolette doppie. I valori testuali (why, pros, zone) scrivili in ${langName()}.\n` +
+        `[{"name":"Nome Area/Campeggio","stars":0,"zone":"tipo e posizione","price":"euro25/notte","why":"perche sceglierla","pros":["servizio1","servizio2","servizio3"],"best":true,"url":"https://www.google.com/maps/search/${encodeURIComponent('area sosta camper ' + cityName)}"}]`;
+    } else {
+      const hint = bdg === 'luxury'
+        ? '5 stelle lusso: Four Seasons, Rocco Forte, Belmond. Fascia 400+ eur/notte.'
+        : bdg === 'economico'
+        ? '2-3 stelle o B&B boutique. Fascia 60-120 eur/notte.'
+        : '3-4 stelle: NH Hotels, Starhotels, Marriott Courtyard. Fascia 120-250 eur/notte.';
+      msg =
+        `Proponi ESATTAMENTE 3 hotel REALI ed esistenti a ${cityName}, TUTTI E 3 della fascia ${bdg} (${hint}).\n` +
+        `Periodo: ${period} ${tripYear || CY}. Viaggiatori: ${trav()}.\n` +
+        `VINCOLO: tutti e 3 gli hotel devono appartenere alla fascia ${bdg}; il prezzo indicato deve essere coerente con quella fascia. Nomi propri reali, niente placeholder.\n` +
+        `Per ognuno indica: prezzo a notte coerente con la fascia, zona, 3 pro. Il migliore qualita/prezzo ha best:true (uno solo).\n` +
+        `Rispondi ESCLUSIVAMENTE con un array JSON valido di 3 oggetti, senza alcun testo prima o dopo, senza blocchi di codice markdown. Usa solo virgolette doppie. I valori testuali (why, pros, zone) scrivili in ${langName()}.\n` +
+        `[{"name":"Nome Hotel","stars":4,"zone":"quartiere","price":"euro150/notte","why":"perche sceglierlo","pros":["p1","p2","p3"],"best":true,"url":"https://www.booking.com/searchresults.html?ss=${encodeURIComponent(cityName)}"}]`;
+    }
     const txt = await callAI(msg, 900, null);
     if (!txt) return null;
     const parsed = parseHotelJSON(txt);
@@ -940,7 +956,14 @@ export default function PlannerPage() {
     let bases = append ? JSON.parse(JSON.stringify(hotelBases)) : [];
 
     // Fallback usato quando la chiamata AI per una citta non restituisce hotel validi
-    const makeFallback = (cityName) => [{
+    const isCamperFb = (transport || '').toLowerCase().includes('camper');
+    const makeFallback = (cityName) => isCamperFb ? [{
+      name: `Cerca aree sosta camper a ${cityName}`, stars: 0,
+      zone: 'area sosta / campeggio', price: 'vedi mappa',
+      why: `Aree sosta, aree attrezzate e campeggi vicino a ${cityName}`,
+      pros: ['posizioni aggiornate', 'servizi camper', 'recensioni reali'], best: true,
+      url: `https://www.google.com/maps/search/${encodeURIComponent('area sosta camper ' + cityName)}`,
+    }] : [{
       name: `Cerca hotel ${budget} a ${cityName}`, stars: budget === 'luxury' ? 5 : budget === 'economico' ? 3 : 4,
       zone: 'centro', price: 'vedi Booking',
       why: `Hotel ${budget} disponibili a ${cityName}`,
@@ -1441,16 +1464,18 @@ export default function PlannerPage() {
         {/* ── Step 10: Alloggi ── */}
         {step === 10 && (
           <div className="p-card" style={{ maxWidth:720 }}>
-            <Badge text={`${t('pl.badge.hotels')} · ${dest} ${tripYear}`} />
-            <div className="p-tt">{t('pl.s10.title')}</div>
-            <div className="p-ht">{t('pl.s10.hint').replace('{budget}', optLabel('budget', budget + '.l'))}</div>
+            <Badge text={`${((transport||'').toLowerCase().includes('camper') ? t('pl.badge.hotels.camper') : t('pl.badge.hotels'))} · ${dest} ${tripYear}`} />
+            <div className="p-tt">{(transport||'').toLowerCase().includes('camper') ? t('pl.s10.title.camper') : t('pl.s10.title')}</div>
+            <div className="p-ht">{(transport||'').toLowerCase().includes('camper') ? t('pl.s10.hint.camper') : t('pl.s10.hint').replace('{budget}', optLabel('budget', budget + '.l'))}</div>
             {hotelLoad && hotelBases.length === 0 && <div className="p-aib"><Dots text={t('pl.load.hotels')} /></div>}
             {hotelBases.length > 0 && (
               <div>
                 {/* Summary bar */}
                 <div style={{ background:'#111', border:`.5px solid ${BRD}`, borderRadius:12, padding:'14px 18px', marginBottom:'1.2rem' }}>
                   <div style={{ fontSize:11, letterSpacing:'2px', color:G, textTransform:'uppercase', fontWeight:600, marginBottom:'0.9rem' }}>
-                    {hotelBases.length > 1 ? t('pl.s10.multiBase').replace('{n}', hotelBases.length) : t('pl.s10.singleBase')}
+                    {(transport||'').toLowerCase().includes('camper')
+                      ? (hotelBases.length > 1 ? t('pl.s10.multiBase.camper').replace('{n}', hotelBases.length) : t('pl.s10.singleBase.camper'))
+                      : (hotelBases.length > 1 ? t('pl.s10.multiBase').replace('{n}', hotelBases.length) : t('pl.s10.singleBase'))}
                   </div>
                   <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:6 }}>
                     {hotelBases.map((b, bi) => (
@@ -1478,6 +1503,7 @@ export default function PlannerPage() {
                   budget={budget}
                   dates={bookingDates()}
                   t={t}
+                  isCamper={(transport||'').toLowerCase().includes('camper')}
                   selKeys={selKeys} setSelKeys={setSelKeys}
                   selNames={selNames} setSelNames={setSelNames}
                 />

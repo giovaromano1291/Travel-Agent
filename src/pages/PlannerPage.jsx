@@ -157,10 +157,12 @@ function mdHtml(t, lang = 'it') {
       const lb = p1.replace(/^([A-Za-z\u00c0-\u00ff\s]+:)\s*/, `<strong style='color:${GL};font-weight:600'>$1</strong> `);
       return `<div style='display:flex;align-items:flex-start;gap:8px;margin:0.35rem 0;color:#ccc;font-size:13px;line-height:1.6'><span style='color:${G};flex-shrink:0'>◆</span><span>${lb}</span></div>`;
     })
-    // Tappa intermedia: riga di testo piano "Tappa intermedia a X: ..." -> badge visivo separato
+    // Tappa intermedia: riga di testo "Tappa intermedia a X: ..." -> badge visivo separato
     .replace(/^(Tappa intermedia a [^:\n]+:?)(.*)$/gim, (_, label, rest) =>
-      `<div style='display:flex;align-items:flex-start;gap:8px;margin:1rem 0 0.4rem;padding:7px 12px;background:#0d1a0d;border-left:3px solid #4caf50;border-radius:0 8px 8px 0'><span style='font-size:12px;font-weight:600;color:#81c784;flex-shrink:0'>${label.trim()}</span>${rest ? `<span style='font-size:12px;color:#aaa'>${rest.trim()}</span>` : ''}</div>`
-    );
+      `<div style='display:flex;align-items:flex-start;gap:8px;margin:1rem 0 0.4rem;padding:7px 12px;background:#0d1a0d;border-left:3px solid #4caf50;border-radius:0 8px 8px 0'><span style='font-size:12px;font-weight:600;color:#81c784;flex-shrink:0'>${label.trim()}</span>${rest ? `<span style='font-size:12px;color:#aaa;margin-left:4px'>${rest.trim()}</span>` : ''}</div>`
+    )
+    // Converti \n residui in <br> senza toccare i tag HTML (split sui tag)
+    .split(/(<[^>]+>)/).map(part => part.startsWith('<') ? part : part.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>')).join('');
 }
 
 /* ─── Mobile detection (iOS / Android / iPadOS 13+) ────────────────────── */
@@ -790,8 +792,8 @@ export default function PlannerPage() {
     if (!inp.trim()) return;
     const d = inp.trim(); setDest(d); setInp(''); setAiPerLoad(true); setStep(2);
     await callAI(
-      `Scrivi in ${langName()} i periodi migliori per visitare ${d} nel ${CY} o ${CY+1} (clima, eventi, affluenza). Inizia DIRETTAMENTE con il primo bullet, senza testo introduttivo. Usa esattamente questo formato (3-4 bullet):\n- **Periodo**: descrizione breve\n- **Periodo**: descrizione breve`,
-      800, t => setAiPer(t)
+      `Scrivi in ${langName()} esattamente 3 bullet sui periodi migliori per visitare ${d} (clima, eventi, affluenza). NESSUN testo introduttivo. NESSUNA frase prima dei bullet. Inizia subito con il primo -. Formato obbligatorio:\n- **NomePeriodo**: una frase di descrizione.\n- **NomePeriodo**: una frase di descrizione.\n- **NomePeriodo**: una frase di descrizione.`,
+      1000, t => setAiPer(t)
     );
     setAiPerLoad(false);
   }
@@ -819,7 +821,7 @@ export default function PlannerPage() {
       `Crea un piano visivo dell'itinerario per: ${dest}, ${period} ${y}, ${duration}${duration.includes('Weekend') ? ' (solo 2-3 giorni, max 2 destinazioni vicine)' : ''}, ${style}, ${trav()}, budget ${budget}.\n\n` +
       `REGOLA CRITICA SUL TIPO:\n- Usa [QUARTIERE] se ${dest} e una SINGOLA CITTA\n- Usa [CITTA] SOLO se l'itinerario tocca piu CITTA DIVERSE\n- Quartieri, arrondissement, zone di una stessa citta = SEMPRE [QUARTIERE]\n- IMPORTANTE: i marcatori [QUARTIERE] e [CITTA] sono etichette tecniche: scrivili SEMPRE ESATTAMENTE cosi in italiano tra parentesi quadre, anche se il resto e in un'altra lingua. NON tradurli mai (non usare [DISTRICT], [CITY], ecc.).\n\n` +
       `FORMATO OBBLIGATORIO per ogni blocco:\n### NOME (N giorni) [TIPO]\n- **Cosa vedere**: luogo - perche\n- **Cosa fare**: attivita - descrizione\n- **Da non perdere**: esperienza - perche\n\n` +
-      `REGOLE:\n1. Solo ### per i titoli\n2. Niente tabelle\n3. Inizia subito col primo ###\n4. La somma dei giorni deve corrispondere a: ${duration}\n5. Scrivi in ${langName()}\n6. OGNI citta/tappa deve avere il PROPRIO titolo ### su una riga separata; non unire mai due localita nello stesso blocco e non attaccare un nuovo titolo alla fine di un bullet\n7. Dopo ogni blocco lascia una riga vuota prima del ### successivo\n\n` +
+      `REGOLE:\n1. Solo ### per i titoli\n2. Niente tabelle\n3. Inizia subito col primo ###\n4. La somma dei giorni deve corrispondere a: ${duration}\n5. Scrivi in ${langName()}\n6. OGNI citta/tappa deve avere il PROPRIO titolo ### su una riga separata; non unire mai due localita nello stesso blocco e non attaccare un nuovo titolo alla fine di un bullet\n7. Dopo ogni blocco lascia una riga vuota prima del ### successivo\n8. Le tappe intermedie su strada vanno scritte come riga di testo DENTRO il blocco della citta di arrivo, NON come blocco ### separato. Formato: \"Tappa intermedia a NOME: breve descrizione\"\n\n` +
       `ESEMPIO singola citta (Parigi, 5gg):\n### LOUVRE & MARAIS (2 giorni) [QUARTIERE]\n- **Cosa vedere**: Museo del Louvre\n### MONTMARTRE (1 giorno) [QUARTIERE]\n### EIFFEL & SAINT-GERMAIN (2 giorni) [QUARTIERE]\n\n` +
       `ESEMPIO piu citta (Costa Azzurra, 7gg):\n### NIZZA (3 giorni) [CITTA]\n### MONACO (2 giorni) [CITTA]\n### CANNES (2 giorni) [CITTA]` +
       dropRouteHint(dep, dest, transport, 'brief', rentAtDest);
@@ -925,9 +927,11 @@ export default function PlannerPage() {
     if (!txt) return null;
     // 1) Rimuovi eventuali fence ```json ... ```
     let clean = txt.replace(/```json/gi, '').replace(/```/g, '').trim();
-    // 2) Sanitizza virgolette tipografiche " " ' ' -> virgolette standard (l'AI le usa talvolta)
+    // 2) Sanitizza virgolette tipografiche " " ' ' → standard (l'AI le usa talvolta)
     clean = clean.replace(/[\u201c\u201d\u201e\u201f\u2033\u2036]/g, '"');
     clean = clean.replace(/[\u2018\u2019\u201a\u201b\u2032\u2035]/g, "'");
+    // 3) Se le curly quotes erano dentro valori già quotati con ", rimuovi le " doppie risultanti
+    clean = clean.replace(/""/g, '"');
     // 2) Prova parse diretto
     try { const a = JSON.parse(clean); if (Array.isArray(a)) return a; } catch {}
     // 3) Trova il PRIMO array bilanciato con scanner di parentesi (non greedy, robusto)

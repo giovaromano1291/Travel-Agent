@@ -216,10 +216,14 @@ async function callAI(userMsg, maxTok = 1000, onChunk) {
     const reader = res.body.getReader();
     const dc = new TextDecoder();
     let full = '';
+    let leftover = ''; // buffer per righe SSE spezzate tra chunk
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      for (const line of dc.decode(value).split('\n')) {
+      const text = leftover + dc.decode(value, { stream: true });
+      const lines = text.split('\n');
+      leftover = lines.pop(); // ultima riga potenzialmente incompleta
+      for (const line of lines) {
         if (line.startsWith('data: ')) {
           try {
             const jj = JSON.parse(line.slice(6));
@@ -227,6 +231,13 @@ async function callAI(userMsg, maxTok = 1000, onChunk) {
           } catch {}
         }
       }
+    }
+    // Processa eventuale leftover finale rimasto nel buffer
+    if (leftover.startsWith('data: ')) {
+      try {
+        const jj = JSON.parse(leftover.slice(6));
+        if (jj.delta?.text) { full += jj.delta.text; if (onChunk) onChunk(full); }
+      } catch {}
     }
     return full;
   } catch { return ''; }
@@ -792,8 +803,14 @@ export default function PlannerPage() {
     if (!inp.trim()) return;
     const d = inp.trim(); setDest(d); setInp(''); setAiPerLoad(true); setStep(2);
     await callAI(
-      `Scrivi in ${langName()} esattamente 3 bullet sui periodi migliori per visitare ${d} (clima, eventi, affluenza). NESSUN testo introduttivo. NESSUNA frase prima dei bullet. Inizia subito con il primo -. Formato obbligatorio:\n- **NomePeriodo**: una frase di descrizione.\n- **NomePeriodo**: una frase di descrizione.\n- **NomePeriodo**: una frase di descrizione.`,
-      1000, t => setAiPer(t)
+      `Scrivi ESATTAMENTE 3 bullet in ${langName()} sui periodi migliori per visitare ${d}. ` +
+      `Il tuo output deve iniziare DIRETTAMENTE con "- **" senza alcun testo prima. ` +
+      `Ogni bullet: una riga sola, max 20 parole dopo i due punti. ` +
+      `Formato esempio:\n- **Primavera (apr-mag)**: clima mite, poca folla, natura in fiore.\n` +
+      `- **Estate (giu-lug)**: festival ed eventi, caldo, più turisti.\n` +
+      `- **Autunno (set-ott)**: vendemmia, tartufo, colori spettacolari.\n\n` +
+      `Ora scrivi i 3 bullet per ${d} (stessa struttura, contenuto specifico per questa destinazione):`,
+      400, t => setAiPer(t)
     );
     setAiPerLoad(false);
   }
